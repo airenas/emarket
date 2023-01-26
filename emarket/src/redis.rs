@@ -3,7 +3,7 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use emarket::data::{DBSaver, Data};
 use redis::{Client, RedisError};
 use redis_ts::{AsyncTsCommands, TsOptions};
-use std::{error::Error, sync::mpsc::RecvError};
+use std::{error::Error};
 
 #[derive()]
 pub struct RedisClient {
@@ -47,7 +47,7 @@ impl DBSaver for RedisClient {
         log::debug!("invoke live");
         let mut conn = self.client.get_async_connection().await?;
         redis::cmd("PING").query_async(&mut conn).await?;
-        Ok(format!("{}", "true"))
+        Ok("ok".to_string())
     }
 
     async fn get_last_time(&self) -> Result<DateTime<Utc>, Box<dyn Error>> {
@@ -63,13 +63,11 @@ impl DBSaver for RedisClient {
                 log::debug!("got last time {}", v.0);
                 let dt =
                     NaiveDateTime::from_timestamp_millis(i64::try_from(v.0)?).unwrap_or(default);
-                let res = DateTime::<Utc>::from_utc(dt, Utc);
-                res
+                DateTime::<Utc>::from_utc(dt, Utc)
             }
             None => {
                 log::debug!("no last items");
-                let res = DateTime::<Utc>::from_utc(default, Utc);
-                res
+                DateTime::<Utc>::from_utc(default, Utc)
             }
         };
         Ok(res)

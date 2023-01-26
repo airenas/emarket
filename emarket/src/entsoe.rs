@@ -77,10 +77,10 @@ fn map_to_data(doc: EntSOEDoc) -> Result<Vec<Data>, Box<dyn Error>> {
         .timeseries
         .iter()
         .flat_map(|t| &t.periods)
-        .scan((), |_, p| to_data(&p).ok())
-        .flat_map(|f| f)
+        .scan((), |_, p| to_data(p).ok())
+        .flatten()
         .collect();
-    return Ok(res);
+    Ok(res)
 }
 
 fn to_data(p: &EntSOEPeriod) -> Result<Vec<Data>, Box<dyn Error>> {
