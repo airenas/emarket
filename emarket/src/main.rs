@@ -8,6 +8,7 @@ use emarket::data::Limiter;
 use emarket::WorkingData;
 use emarket::{get_last_time, run_exit_indicator, saver_start};
 use reqwest::Error;
+use tokio_util::sync::CancellationToken;
 use std::process;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
@@ -21,9 +22,7 @@ use crate::limiter::RateLimiter;
 use crate::redis::RedisClient;
 use clap::Command;
 use emarket::data::DBSaver;
-use futures::future::join_all;
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::sync::watch;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -62,7 +61,7 @@ async fn main() -> Result<(), Error> {
     let limiter = Arc::new(Mutex::new(boxed_limiter));
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-    let (tx_close, rx_close) = watch::channel(0);
+    let cancel_token = CancellationToken::new();
     let (tx_wait_exit, mut rx_wait_exit) = tokio::sync::mpsc::channel(1);
     let (tx_exit_indicator, mut rx_exit_indicator) = tokio::sync::mpsc::unbounded_channel();
 
@@ -78,7 +77,7 @@ async fn main() -> Result<(), Error> {
         limiter: int_limiter,
     };
 
-    let importer = run_exit_indicator(w_data, rx_close.clone(), tx_exit_indicator.clone());
+    let importer = run_exit_indicator(w_data, cancel_token.clone(), tx_exit_indicator.clone());
 
     let int_exit = tx_wait_exit.clone();
     tokio::spawn(async move { start_saver_loop(boxed_db_saver, &mut rx, int_exit).await });
@@ -92,19 +91,16 @@ async fn main() -> Result<(), Error> {
             _ = rx_exit_indicator.recv() => log::info!("Exit event from some loader"),
         }
         log::debug!("sending exit event");
-        if let Err(e) = tx_close.send(1) {
-            log::error!("sending close event: {e}");
-        }
+        cancel_token.cancel();
         log::debug!("expected drop tx_close");
     });
 
     drop(tx_wait_exit);
     drop(tx);
 
-    join_all(vec![importer]).await.iter().for_each(|err| {
-        if let Err(e) = err {
-            log::error!("problem importing: {e}");
-        }
+    _ = importer.await.unwrap_or_else(|err| {
+        log::error!("{err}");
+        process::exit(1);
     });
 
     log::info!("wait jobs to finish");
@@ -119,13 +115,13 @@ async fn start_saver_loop(
     receiver: &mut Receiver<Data>,
     _tx_exit: Sender<()>,
 ) -> Result<(), String> {
-    log::info!("Test Postgres is live ...");
+    log::info!("Test Redis is live ...");
     db_saver.live().await.unwrap();
-    log::info!("Postgresql OK");
+    log::info!("Redis OK");
 
     saver_start(db_saver, receiver).await.unwrap();
 
-    log::info!("exit loop");
+    log::info!("exit redis loop");
     Ok(())
 }
 
@@ -135,7 +131,7 @@ fn app_config() -> Result<Config, &'static str> {
     let cmd = Command::new("importer")
         .version(app_version)
         .author("Airenas V.<airenass@gmail.com>")
-        .about("Import entsoe day ahed prices to local timeseries DB")
+        .about("Import entsoe day ahead prices to local timeseries DB")
         .arg(
             Arg::new("document")
                 .short('d')

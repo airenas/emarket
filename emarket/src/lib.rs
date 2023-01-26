@@ -4,11 +4,11 @@ use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use clap::ArgMatches;
 use data::{DBSaver, Data, Limiter, Loader};
 use std::error::Error;
-use tokio::sync::watch;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
     Mutex,
 };
+use tokio_util::sync::CancellationToken;
 
 pub struct Config {
     pub document: String,
@@ -58,10 +58,10 @@ pub struct WorkingData {
 
 pub async fn run_exit_indicator(
     w_data: WorkingData,
-    close_ch: watch::Receiver<i32>,
+    close_token: CancellationToken,
     exit_ind: tokio::sync::mpsc::UnboundedSender<i32>,
 ) -> ResultM {
-    match run(w_data, close_ch).await {
+    match run(w_data, close_token).await {
         Ok(_) => {
             log::info!("exit run");
         }
@@ -76,7 +76,7 @@ pub async fn run_exit_indicator(
     Ok(())
 }
 
-pub async fn run(w_data: WorkingData, mut close_ch: watch::Receiver<i32>) -> ResultM {
+pub async fn run(w_data: WorkingData, close_token: CancellationToken) -> ResultM {
     log::info!("Importing: from {}", w_data.start_from);
     log::info!("Test EntSOE is live");
     match w_data.loader.live().await {
@@ -95,12 +95,9 @@ pub async fn run(w_data: WorkingData, mut close_ch: watch::Receiver<i32>) -> Res
 
     loop {
         log::info!("loop");
-        match close_ch.has_changed() {
-            Ok(_) => {}
-            Err(err) => {
-                log::debug!("got watcher err {}", err);
-                break;
-            }
+        if close_token.is_cancelled() {
+            log::debug!("got cancel event");
+            break;
         }
         log::info!("after check");
         let max_dur = chrono::Duration::minutes(15);
@@ -116,11 +113,10 @@ pub async fn run(w_data: WorkingData, mut close_ch: watch::Receiver<i32>) -> Res
             tokio::pin!(sleep);
             tokio::select! {
                 _ = &mut sleep => {},
-                cr = close_ch.changed() => {
-                    if let Err(err) = cr {
-                        log::debug!("got watcher err {}", err);
-                        break;
-                } }
+                _ = close_token.cancelled() => {
+                    log::debug!("got cancel event");
+                    break;
+                }
             }
         }
     }
