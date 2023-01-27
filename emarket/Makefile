@@ -16,6 +16,7 @@ test/unit:
 	RUST_LOG=DEBUG cargo test --no-fail-fast
 .PHONY: test/unit		
 test/lint:
+	@cargo clippy -V
 	cargo clippy --all-targets --all-features -- -D warnings
 .PHONY: test/lint	
 ###############################################################################

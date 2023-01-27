@@ -133,7 +133,7 @@ pub async fn get_last_time(
     log::info!("Get last value in DB");
     db.get_last_time()
         .await
-        .map_err(|e| format!("get last time: {} ", e).into())
+        .map_err(|e| format!("get last time: {e} ").into())
 }
 
 async fn import(
@@ -188,7 +188,7 @@ pub async fn saver_start(
                 .save(&line)
                 .await
                 .map(|_v| ())
-                .map_err(|err| format!("save err: {}", err))?,
+                .map_err(|e| format!("save err: {e}"))?,
             None => break,
         }
     }
