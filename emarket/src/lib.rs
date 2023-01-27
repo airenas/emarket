@@ -87,29 +87,30 @@ pub async fn run(w_data: WorkingData, close_token: CancellationToken) -> ResultM
             return Err(err);
         }
     }
-    let mut last_time = w_data.start_from;
-    let dur = chrono::Duration::from_std(
-        duration_str::parse("1m").map_err(|e| format!("duration  parse: {}", e))?,
-    )
-    .map_err(|e| format!("duration parse: {}", e))?;
-
+    let mut from = w_data.start_from;
+    let take_dur = Duration::days(7);
     loop {
         log::info!("loop");
         if close_token.is_cancelled() {
-            log::debug!("got cancel event");
+            log::debug!("cancel detected");
             break;
         }
-        log::info!("after check");
-        let max_dur = chrono::Duration::minutes(15);
-        let mut td = last_time - (Utc::now() - dur);
-        if td < chrono::Duration::zero() {
-            last_time = import(&w_data, last_time).await?;
-        } else {
-            if td > max_dur {
-                td = max_dur;
-            }
-            log::info!("sleep till {}", Utc::now() + td);
-            let sleep = tokio::time::sleep(td.to_std()?);
+        let to = from + take_dur;
+        let (last_item_time, imported) = import(&w_data, from, to).await?;
+        log::info!(
+            "got last item time {}, imported {}",
+            last_item_time,
+            imported
+        );
+        if imported == 0 && to < Utc::now() {
+            from = from + take_dur - Duration::days(1);
+            continue;
+        } else if imported == 0 {
+            log::info!("no new imports");
+            from = last_item_time;
+            let sleep_time = Duration::hours(1);
+            log::info!("sleep till {}", Utc::now() + sleep_time);
+            let sleep = tokio::time::sleep(sleep_time.to_std()?);
             tokio::pin!(sleep);
             tokio::select! {
                 _ = &mut sleep => {},
@@ -118,6 +119,8 @@ pub async fn run(w_data: WorkingData, close_token: CancellationToken) -> ResultM
                     break;
                 }
             }
+        } else {
+            from = last_item_time;
         }
     }
     log::info!("exit import loop");
@@ -136,36 +139,40 @@ pub async fn get_last_time(
 async fn import(
     w_data: &WorkingData,
     from: DateTime<Utc>,
-) -> Result<DateTime<Utc>, Box<dyn Error>> {
+    to: DateTime<Utc>,
+) -> Result<(DateTime<Utc>, u64), Box<dyn Error>> {
     {
         log::info!("wait for import");
         let wait = w_data.limiter.lock().await;
         wait.wait().await?;
         log::info!("let's go");
     }
-    log::info!("Getting data from {}", from);
+    log::info!("loading data from {}", from);
 
-    let data = w_data
-        .loader
-        .retrieve(from, from + Duration::days(7))
-        .await?;
+    let data = w_data.loader.retrieve(from, to).await?;
     data.iter().for_each(|f| {
         log::trace!("{}", f.to_str());
         // w_data.saver.save(f).await;
     });
+    let c = data.len();
     log::info!("got {} lines", data.len());
     let mut res = from.timestamp_millis();
+
     for line in data {
-        if line.at > from.timestamp_millis() {
+        if res < line.at {
             res = line.at;
         }
         w_data.sender.send(line).await?;
     }
     log::debug!("send lines to save");
-    Ok(DateTime::<Utc>::from_utc(
+    let res_time = DateTime::<Utc>::from_utc(
         NaiveDateTime::from_timestamp_millis(res).expect("invalid date"),
         Utc,
-    ))
+    );
+    if from == res_time { // nothing new
+        return Ok((res_time, 0));
+    }
+    return Ok((res_time, c.try_into()?));
 }
 
 pub async fn saver_start(
