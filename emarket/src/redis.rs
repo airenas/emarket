@@ -54,7 +54,7 @@ impl DBSaver for RedisClient {
         log::debug!("invoke live");
         let mut conn = self.client.get_async_connection().await?;
         let latest: Option<(u64, f64)> = conn.ts_get(self.ts_name.as_str()).await?;
-        let default = NaiveDate::from_ymd_opt(2010, 1, 1)
+        let default = NaiveDate::from_ymd_opt(2014, 1, 1)
             .unwrap()
             .and_hms_opt(0, 0, 0)
             .unwrap();
