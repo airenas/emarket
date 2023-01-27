@@ -98,7 +98,7 @@ async fn main() -> Result<(), Error> {
     drop(tx_wait_exit);
     drop(tx);
 
-    _ = importer.await.unwrap_or_else(|err| {
+    importer.await.unwrap_or_else(|err| {
         log::error!("{err}");
         process::exit(1);
     });

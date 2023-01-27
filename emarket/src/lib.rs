@@ -172,7 +172,7 @@ async fn import(
     if from == res_time { // nothing new
         return Ok((res_time, 0));
     }
-    return Ok((res_time, c.try_into()?));
+    Ok((res_time, c.try_into()?))
 }
 
 pub async fn saver_start(

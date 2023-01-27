@@ -5,7 +5,7 @@ run:
 .PHONY: run
 ###############################################################################
 run/build: build/local
-	RUST_LOG=DEBUG target/release/importer --key $(KEY)
+	RUST_LOG=DEBUG target/release/importer --key $(KEY) --redis $(REDIS_URL)
 .PHONY: run/build
 ###############################################################################
 build/local: 
