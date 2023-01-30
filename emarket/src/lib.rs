@@ -1,6 +1,7 @@
 pub mod data;
+pub mod utils;
 
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use chrono::{Duration, NaiveDateTime, Utc};
 use clap::ArgMatches;
 use data::{DBSaver, Data, Limiter, Loader};
 use std::error::Error;
@@ -50,7 +51,7 @@ type LimiterM = std::sync::Arc<Mutex<Box<dyn Limiter>>>;
 type ResultM = Result<(), Box<dyn Error>>;
 
 pub struct WorkingData {
-    pub start_from: DateTime<Utc>,
+    pub start_from: NaiveDateTime,
     pub loader: Box<dyn Loader>,
     pub limiter: LimiterM,
     pub sender: Sender<Data>,
@@ -102,7 +103,7 @@ pub async fn run(w_data: WorkingData, close_token: CancellationToken) -> ResultM
             last_item_time,
             imported
         );
-        if imported == 0 && to < Utc::now() {
+        if imported == 0 && to < Utc::now().naive_utc() {
             from = from + take_dur - Duration::days(1);
             continue;
         } else if imported == 0 {
@@ -127,20 +128,11 @@ pub async fn run(w_data: WorkingData, close_token: CancellationToken) -> ResultM
     Ok(())
 }
 
-pub async fn get_last_time(
-    db: &'_ (dyn DBSaver + Send + Sync),
-) -> Result<DateTime<Utc>, Box<dyn Error>> {
-    log::info!("Get last value in DB");
-    db.get_last_time()
-        .await
-        .map_err(|e| format!("get last time: {e} ").into())
-}
-
 async fn import(
     w_data: &WorkingData,
-    from: DateTime<Utc>,
-    to: DateTime<Utc>,
-) -> Result<(DateTime<Utc>, u64), Box<dyn Error>> {
+    from: NaiveDateTime,
+    to: NaiveDateTime,
+) -> Result<(NaiveDateTime, u64), Box<dyn Error>> {
     {
         log::info!("wait for import");
         let wait = w_data.limiter.lock().await;
@@ -156,7 +148,7 @@ async fn import(
     });
     let c = data.len();
     log::info!("got {} lines", data.len());
-    let mut res = from.timestamp_millis();
+    let mut res = from;
 
     for line in data {
         if res < line.at {
@@ -165,14 +157,10 @@ async fn import(
         w_data.sender.send(line).await?;
     }
     log::debug!("send lines to save");
-    let res_time = DateTime::<Utc>::from_utc(
-        NaiveDateTime::from_timestamp_millis(res).expect("invalid date"),
-        Utc,
-    );
-    if from == res_time { // nothing new
-        return Ok((res_time, 0));
+    if from == res { // nothing new
+        return Ok((res, 0));
     }
-    Ok((res_time, c.try_into()?))
+    Ok((res, c.try_into()?))
 }
 
 pub async fn saver_start(

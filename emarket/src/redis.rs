@@ -1,9 +1,12 @@
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
-use emarket::data::{DBSaver, Data};
+use chrono::{NaiveDateTime};
+use emarket::{
+    data::{DBSaver, Data},
+    utils::to_time,
+};
 use redis::{Client, RedisError};
 use redis_ts::{AsyncTsCommands, TsOptions};
-use std::{error::Error};
+use std::error::Error;
 
 #[derive()]
 pub struct RedisClient {
@@ -50,24 +53,18 @@ impl DBSaver for RedisClient {
         Ok("ok".to_string())
     }
 
-    async fn get_last_time(&self) -> Result<DateTime<Utc>, Box<dyn Error>> {
+    async fn get_last_time(&self) -> Result<Option<NaiveDateTime>, Box<dyn Error>> {
         log::debug!("invoke live");
         let mut conn = self.client.get_async_connection().await?;
         let latest: Option<(u64, f64)> = conn.ts_get(self.ts_name.as_str()).await?;
-        let default = NaiveDate::from_ymd_opt(2014, 1, 1)
-            .unwrap()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
         let res = match latest {
-            Some(v) => {
-                log::debug!("got last time {}", v.0);
-                let dt =
-                    NaiveDateTime::from_timestamp_millis(i64::try_from(v.0)?).unwrap_or(default);
-                DateTime::<Utc>::from_utc(dt, Utc)
+            Some((t, _)) => {
+                log::debug!("got last time {}", t);
+                Some(to_time(t))
             }
             None => {
                 log::debug!("no last items");
-                DateTime::<Utc>::from_utc(default, Utc)
+                None
             }
         };
         Ok(res)
@@ -75,7 +72,7 @@ impl DBSaver for RedisClient {
 
     async fn save(&self, data: &Data) -> Result<bool, Box<dyn Error>> {
         let mut conn = self.client.get_async_connection().await?;
-        conn.ts_add(self.ts_name.as_str(), data.at, data.price)
+        conn.ts_add(self.ts_name.as_str(), data.at.timestamp_millis(), data.price)
             .await?;
         Ok(true)
     }

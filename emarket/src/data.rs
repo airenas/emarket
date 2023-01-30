@@ -1,11 +1,10 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use std::error::Error;
+use chrono::{NaiveDateTime};
+use std::{error::Error};
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Data {
-    pub at: i64,
+    pub at: NaiveDateTime,
     pub price: f64,
 }
 
@@ -20,15 +19,15 @@ pub trait Loader {
     async fn live(&self) -> Result<String, Box<dyn Error>>;
     async fn retrieve(
         &self,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
+        from: NaiveDateTime,
+        to: NaiveDateTime,
     ) -> Result<Vec<Data>, Box<dyn Error>>;
 }
 
 #[async_trait]
 pub trait DBSaver {
     async fn live(&self) -> Result<String, Box<dyn Error>>;
-    async fn get_last_time(&self) -> Result<DateTime<Utc>, Box<dyn Error>>;
+    async fn get_last_time(&self) -> Result<Option<NaiveDateTime>, Box<dyn Error>>;
     async fn save(&self, data: &Data) -> Result<bool, Box<dyn Error>>;
 }
 
@@ -39,9 +38,11 @@ pub trait Limiter {
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveDateTime;
+
     use crate::data::Data;
     #[test]
     fn to_string() {
-        assert_eq!(Data { at: 10, price: 1.0 }.to_str(), "at: 10, price 1");
+        assert_eq!(Data { at: NaiveDateTime::from_timestamp_millis(10).unwrap(), price: 1.0 }.to_str(), "at: 1970-01-01 00:00:00.010, price 1");
     }
 }

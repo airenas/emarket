@@ -2,18 +2,19 @@ mod entsoe;
 mod limiter;
 mod redis;
 
+use chrono::NaiveDate;
 use clap::Arg;
 use emarket::data::Data;
 use emarket::data::Limiter;
 use emarket::WorkingData;
-use emarket::{get_last_time, run_exit_indicator, saver_start};
+use emarket::{run_exit_indicator, saver_start};
 use reqwest::Error;
-use tokio_util::sync::CancellationToken;
 use std::process;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use emarket::Config;
 use entsoe::EntSOE;
@@ -46,10 +47,12 @@ async fn main() -> Result<(), Error> {
         );
     }
 
-    let db_saver = RedisClient::new(&cfg.redis_url).await.unwrap_or_else(|err| {
-        log::error!("redis client init: {err}");
-        process::exit(1)
-    });
+    let db_saver = RedisClient::new(&cfg.redis_url)
+        .await
+        .unwrap_or_else(|err| {
+            log::error!("redis client init: {err}");
+            process::exit(1)
+        });
     // let db_saver = PostgresClientRetryable::new(db_saver);
     let boxed_db_saver: Box<dyn DBSaver + Send + Sync> = Box::new(db_saver);
     log::info!("Test Redis is live ...");
@@ -69,7 +72,13 @@ async fn main() -> Result<(), Error> {
 
     //     let interval = config.interval.clone();
     let int_limiter = limiter.clone();
-    let start_from = get_last_time(boxed_db_saver.as_ref()).await.unwrap();
+    let start_from = boxed_db_saver.get_last_time().await.unwrap().unwrap_or(
+        NaiveDate::from_ymd_opt(2014, 1, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap(),
+    );
+    log::info!("start inport from {start_from}");
     let w_data = WorkingData {
         loader: Box::new(loader),
         start_from,

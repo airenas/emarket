@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
 use emarket::data::{Data, Loader};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
@@ -50,8 +50,8 @@ impl Loader for EntSOE {
     }
     async fn retrieve(
         &self,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
+        from: NaiveDateTime,
+        to: NaiveDateTime,
     ) -> std::result::Result<Vec<Data>, Box<dyn Error>> {
         //https://transparency.entsoe.eu/api?securityToken=$(TOKEN)&documentType=A44&in_Domain=10YLT-1001A0008Q&out_Domain=10YLT-1001A0008Q&periodStart=202112312300&periodEnd=202212312300
         let url = format!(
@@ -68,7 +68,7 @@ impl Loader for EntSOE {
     }
 }
 
-fn to_time_str(t: DateTime<Utc>) -> String {
+fn to_time_str(t: NaiveDateTime) -> String {
     t.format("%Y%m%d%H%M").to_string()
 }
 
@@ -89,7 +89,7 @@ fn to_data(p: &EntSOEPeriod) -> Result<Vec<Data>, Box<dyn Error>> {
         .points
         .iter()
         .map(|p| Data {
-            at: (time + chrono::Duration::hours(i64::from(p.position) - 1)).timestamp_millis(),
+            at: time + chrono::Duration::hours(i64::from(p.position) - 1),
             price: p.price,
         })
         .collect();
@@ -137,7 +137,7 @@ struct EntSOEPoint {
 #[cfg(test)]
 mod tests {
     use approx::assert_relative_eq;
-    use chrono::{DateTime, NaiveDateTime, Utc};
+    use chrono::{NaiveDateTime};
 
     use crate::entsoe::{map_to_data, to_time_str, EntSOEDoc};
     use serde_xml_rs::from_str;
@@ -210,25 +210,19 @@ mod tests {
         let res = map_to_data(deserialized).unwrap();
         assert_eq!(res.len(), 2);
         assert_relative_eq!(res[0].price, 50.05);
-        assert_eq!(res[0].at, 1640991600000);
+        assert_eq!(res[0].at.timestamp_millis(), 1640991600000);
         assert_relative_eq!(res[1].price, 41.33);
-        assert_eq!(res[1].at, 1640995200000);
+        assert_eq!(res[1].at.timestamp_millis(), 1640995200000);
     }
 
     #[test]
     fn formats_time() {
         assert_eq!(
-            to_time_str(DateTime::<Utc>::from_utc(
-                NaiveDateTime::from_timestamp_millis(1640991600000).unwrap(),
-                Utc
-            )),
+            to_time_str(NaiveDateTime::from_timestamp_millis(1640991600000).unwrap()),
             "202112312300"
         );
         assert_eq!(
-            to_time_str(DateTime::<Utc>::from_utc(
-                NaiveDateTime::from_timestamp_millis(1640995200000).unwrap(),
-                Utc
-            )),
+            to_time_str(NaiveDateTime::from_timestamp_millis(1640995200000).unwrap()),
             "202201010000"
         );
     }
