@@ -24,7 +24,7 @@ services:
       - ./.data/redis:/data:rw"
       
   grafana:
-    image: grafana/grafana:9.1.4
+    image: grafana/grafana:9.3.6
     container_name: emarket-grafana
     restart: unless-stopped
     logging: *default-logging
@@ -43,7 +43,7 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ENABLE_GZIP=true
       - GF_INSTALL_PLUGINS=redis-datasource
-      - GF_FEATURE_TOGGLES_PUBLICDASHBOARDS=true
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
 
   importer:
     image: airenas/emarket-importer:${IMPORTER_VERSION}
