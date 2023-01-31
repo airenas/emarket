@@ -1,2 +1,4 @@
 emarket/target
 emarket/Makefile.options
+deploy/local/.env
+deploy/local/.data
