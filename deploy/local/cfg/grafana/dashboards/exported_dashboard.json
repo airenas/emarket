@@ -38,6 +38,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -51,7 +52,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "none"
         },
         "overrides": []
       },
@@ -79,7 +81,7 @@
       "pluginVersion": "9.3.6",
       "targets": [
         {
-          "command": "ts.get",
+          "command": "ts.range",
           "datasource": {
             "type": "redis-datasource",
             "uid": "vbs7i4AVz"
@@ -134,6 +136,7 @@
               "mode": "off"
             }
           },
+          "displayName": "2",
           "mappings": [],
           "noValue": "-",
           "thresholds": {
@@ -203,13 +206,13 @@
     "list": []
   },
   "time": {
-    "from": "now-2d",
-    "to": "now+2d"
+    "from": "now-7d",
+    "to": "now"
   },
   "timepicker": {},
   "timezone": "",
-  "title": "NP",
-  "uid": "jVK8G404z",
-  "version": 1,
+  "title": "NP All",
+  "uid": "jVK8G404h",
+  "version": 2,
   "weekStart": ""
 }
