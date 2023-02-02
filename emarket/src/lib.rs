@@ -11,6 +11,8 @@ use tokio::sync::{
 };
 use tokio_util::sync::CancellationToken;
 
+use crate::utils::jitter;
+
 pub struct Config {
     pub document: String,
     pub domain: String,
@@ -103,15 +105,16 @@ pub async fn run(w_data: WorkingData, close_token: CancellationToken) -> ResultM
             last_item_time,
             imported
         );
-        if imported == 0 && to < Utc::now().naive_utc() {
+        let now = Utc::now().naive_utc();
+        if imported == 0 && to < now {
             from = from + take_dur - Duration::days(1);
             continue;
         } else if imported == 0 {
             log::info!("no new imports");
-            from = last_item_time;
-            let sleep_time = Duration::hours(1);
-            log::info!("sleep till {}", Utc::now() + sleep_time);
+            let sleep_time = get_sleep(last_item_time, now, jitter);
+            log::info!("sleep till {}", now + sleep_time);
             let sleep = tokio::time::sleep(sleep_time.to_std()?);
+
             tokio::pin!(sleep);
             tokio::select! {
                 _ = &mut sleep => {},
@@ -120,12 +123,26 @@ pub async fn run(w_data: WorkingData, close_token: CancellationToken) -> ResultM
                     break;
                 }
             }
-        } else {
-            from = last_item_time;
         }
+        from = last_item_time;
     }
     log::info!("exit import loop");
     Ok(())
+}
+
+fn get_sleep(
+    last_item_time: NaiveDateTime,
+    now: NaiveDateTime,
+    j_f: fn(Duration) -> Duration,
+) -> Duration {
+    //expected new data to be fefore 10h
+    let expected_next = last_item_time - Duration::hours(10) - Duration::minutes(10);
+    let sleep = if now < expected_next {
+        expected_next - now 
+    } else {
+        Duration::minutes(3)
+    };
+    sleep + j_f(Duration::minutes(5))
 }
 
 async fn import(
@@ -157,7 +174,8 @@ async fn import(
         w_data.sender.send(line).await?;
     }
     log::debug!("send lines to save");
-    if from == res { // nothing new
+    if from == res {
+        // nothing new
         return Ok((res, 0));
     }
     Ok((res, c.try_into()?))
@@ -182,4 +200,57 @@ pub async fn saver_start(
     }
     log::info!("exit save loop");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, Utc};
+
+    use crate::get_sleep;
+
+    #[test]
+    fn get_sleep_long() {
+        let now = Utc::now().naive_utc();
+        let at = now + Duration::hours(25);
+        assert_eq!(
+            get_sleep(at, now, |_| Duration::minutes(0)),
+            at - now - Duration::hours(10) - Duration::minutes(10)
+        );
+    }
+    #[test]
+    fn get_sleep_near() {
+        let now = Utc::now().naive_utc();
+        let at = now + Duration::hours(5);
+        assert_eq!(
+            get_sleep(at, now, |_| Duration::minutes(0)),
+            Duration::minutes(3)
+        );
+    }
+    #[test]
+    fn get_sleep_near_jitter() {
+        let now = Utc::now().naive_utc();
+        let at = now + Duration::hours(5);
+        assert_eq!(
+            get_sleep(at, now, |_| Duration::minutes(1)),
+            Duration::minutes(4)
+        );
+    }
+    #[test]
+    fn get_sleep_near_10() {
+        let now = Utc::now().naive_utc();
+        let at = now + Duration::hours(10) + Duration::minutes(11);
+        assert_eq!(
+            get_sleep(at, now, |_| Duration::minutes(0)),
+            Duration::minutes(1)
+        );
+    }
+    #[test]
+    fn get_sleep_near_10_2() {
+        let now = Utc::now().naive_utc();
+        let at = now + Duration::hours(10) + Duration::minutes(9);
+        assert_eq!(
+            get_sleep(at, now, |_| Duration::minutes(0)),
+            Duration::minutes(3)
+        );
+    }
 }
