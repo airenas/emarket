@@ -30,7 +30,7 @@ impl EntSOE {
             .build();
 
         Ok(EntSOE {
-            url: "https://transparency.entsoe.eu/api".to_string(),
+            url: "https://web-api.tp.entsoe.eu/api".to_string(),
             client,
             document: document.to_string(),
             domain: domain.to_string(),
