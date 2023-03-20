@@ -27,6 +27,7 @@ redis_ts = { version = "0.5.0", features = ['tokio-comp'] }
 tokio-util = "0.7.4"
 deadpool-redis = "0.11.1"
 rand = "0.8.5"
+chrono-tz = { version = "0.8"}
 
 [dev-dependencies]
 approx = "0.5.1"

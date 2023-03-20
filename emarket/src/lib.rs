@@ -3,7 +3,7 @@ pub mod utils;
 
 use chrono::{Duration, NaiveDateTime, Utc};
 use clap::ArgMatches;
-use data::{DBSaver, Data, Limiter, Loader};
+use data::{Aggregator, DBSaver, Data, Limiter, Loader};
 use std::error::Error;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
@@ -57,6 +57,7 @@ pub struct WorkingData {
     pub loader: Box<dyn Loader>,
     pub limiter: LimiterM,
     pub sender: Sender<Data>,
+    pub import_indicator: Sender<NaiveDateTime>,
 }
 
 pub async fn run_exit_indicator(
@@ -124,6 +125,8 @@ pub async fn run(w_data: WorkingData, close_token: CancellationToken) -> ResultM
                 }
             }
         }
+        log::info!("send import indicator to {last_item_time}");
+        w_data.import_indicator.send(last_item_time).await?;
         from = last_item_time;
     }
     log::info!("exit import loop");
@@ -138,7 +141,7 @@ fn get_sleep(
     //expected new data to be fefore 10h
     let expected_next = last_item_time - Duration::hours(10) - Duration::minutes(10);
     let sleep = if now < expected_next {
-        expected_next - now 
+        expected_next - now
     } else {
         Duration::minutes(3)
     };
@@ -199,6 +202,27 @@ pub async fn saver_start(
         }
     }
     log::info!("exit save loop");
+    Ok(())
+}
+
+pub async fn aggregate_start(
+    mut worker: Box<dyn Aggregator + Send + Sync>,
+    receiver: &mut Receiver<NaiveDateTime>,
+) -> Result<(), String> {
+    log::info!("start db saver loop");
+    loop {
+        let td = receiver.recv().await;
+        log::trace!("got aggregate indicator");
+        match td {
+            Some(td) => worker
+                .work(td)
+                .await
+                .map(|_v| ())
+                .map_err(|e| format!("save err: {e}"))?,
+            None => break,
+        }
+    }
+    log::info!("exit aggreagate save loop");
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use chrono::{NaiveDateTime};
-use std::{error::Error};
+use chrono::NaiveDateTime;
+use std::error::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
@@ -25,10 +25,20 @@ pub trait Loader {
 }
 
 #[async_trait]
+pub trait Aggregator {
+    async fn work(&mut self, from: NaiveDateTime) -> Result<bool, Box<dyn Error>>;
+}
+
+#[async_trait]
 pub trait DBSaver {
     async fn live(&self) -> Result<String, Box<dyn Error>>;
     async fn get_last_time(&self) -> Result<Option<NaiveDateTime>, Box<dyn Error>>;
     async fn save(&self, data: &Data) -> Result<bool, Box<dyn Error>>;
+    async fn load(
+        &self,
+        from: NaiveDateTime,
+        to: NaiveDateTime,
+    ) -> Result<Vec<Data>, Box<dyn Error>>;
 }
 
 #[async_trait]
@@ -43,6 +53,13 @@ mod tests {
     use crate::data::Data;
     #[test]
     fn to_string() {
-        assert_eq!(Data { at: NaiveDateTime::from_timestamp_millis(10).unwrap(), price: 1.0 }.to_str(), "at: 1970-01-01 00:00:00.010, price 1");
+        assert_eq!(
+            Data {
+                at: NaiveDateTime::from_timestamp_millis(10).unwrap(),
+                price: 1.0
+            }
+            .to_str(),
+            "at: 1970-01-01 00:00:00.010, price 1"
+        );
     }
 }

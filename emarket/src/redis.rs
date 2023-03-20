@@ -5,22 +5,22 @@ use emarket::{
     data::{DBSaver, Data},
     utils::to_time,
 };
-use redis::{RedisError};
-use redis_ts::{AsyncTsCommands, TsOptions};
+use redis::RedisError;
+use redis_ts::{AsyncTsCommands, TsOptions, TsRange};
 use std::error::Error;
 
-#[derive()]
+#[derive(Clone)]
 pub struct RedisClient {
     pool: Pool,
     ts_name: String,
 }
 
 impl RedisClient {
-    pub async fn new(db_url: &str) -> Result<RedisClient, Box<dyn Error>> {
-        let cfg = Config::from_url(db_url);
-        let pool = cfg.create_pool(Some(Runtime::Tokio1))?;
+    pub async fn new(pool: Pool, ts_name: &str) -> Result<RedisClient, Box<dyn Error>> {
+        // let cfg = Config::from_url(db_url);
+        // let pool = cfg.create_pool(Some(Runtime::Tokio1))?;
 
-        let ts_name = "np_lt";
+        // let ts_name = "np_lt";
         let mut conn = pool.get().await?;
         let r: Result<bool, RedisError> = conn
             .ts_create(
@@ -82,5 +82,33 @@ impl DBSaver for RedisClient {
         )
         .await?;
         Ok(true)
+    }
+
+    async fn load(
+        &self,
+        from: NaiveDateTime,
+        to: NaiveDateTime,
+    ) -> Result<Vec<Data>, Box<dyn Error>> {
+        log::debug!("invoke load");
+        let mut conn = self.pool.get().await?;
+        let none_int: Option<u64> = None;
+        let list: TsRange<u64, f64> = conn
+            .ts_range(
+                self.ts_name.as_str(),
+                from.timestamp_millis(),
+                to.timestamp_millis() - 1,  // imitate range [from, to)
+                none_int,
+                None,
+            )
+            .await?;
+        let res = list
+            .values
+            .iter()
+            .map(|f| Data {
+                at: to_time(f.0),
+                price: f.1,
+            })
+            .collect();
+        Ok(res)
     }
 }
