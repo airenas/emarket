@@ -7,20 +7,20 @@ use std::error::Error;
 use std::ops::Add;
 
 #[derive()]
-pub struct AgregatorByDate {
+pub struct AggregatorByDate {
     db_loader: Box<dyn DBSaver + Sync + Send>,
     db_saver: Box<dyn DBSaver + Sync + Send>,
     last_imported_time: Option<NaiveDateTime>,
     time_func: fn(NaiveDateTime) -> (NaiveDateTime, NaiveDateTime),
 }
 
-impl AgregatorByDate {
+impl AggregatorByDate {
     pub async fn new(
         db_loader: Box<dyn DBSaver + Sync + Send>,
         db_saver: Box<dyn DBSaver + Sync + Send>,
         time_func: fn(NaiveDateTime) -> (NaiveDateTime, NaiveDateTime),
-    ) -> Result<AgregatorByDate, Box<dyn Error>> {
-        Ok(AgregatorByDate {
+    ) -> Result<AggregatorByDate, Box<dyn Error>> {
+        Ok(AggregatorByDate {
             db_loader,
             db_saver,
             last_imported_time: None,
@@ -30,14 +30,14 @@ impl AgregatorByDate {
 }
 
 #[async_trait]
-impl Aggregator for AgregatorByDate {
+impl Aggregator for AggregatorByDate {
     async fn work(&mut self, last_item_time: NaiveDateTime) -> Result<bool, Box<dyn Error>> {
         if self.last_imported_time.is_none() {
             self.last_imported_time = self.db_saver.get_last_time().await?
         }
         let mut time = self
             .last_imported_time
-            .or_else(|| default_time())
+            .or_else(default_time)
             .ok_or("no start time")?;
         while time <= last_item_time {
             log::info!("aggregate for {time}");
@@ -81,11 +81,11 @@ impl Aggregator for Aggregators {
 }
 
 fn calc_avg(data: Vec<Data>) -> Option<f64> {
-    if data.len() == 0 {
+    if data.is_empty() {
         return None;
     }
     let sum: f64 = data.iter().map(|x| x.price).sum();
-    return Some(sum / (data.len() as f64));
+    Some(sum / (data.len() as f64))
 }
 
 fn default_time() -> Option<NaiveDateTime> {
@@ -107,7 +107,7 @@ pub fn time_day(time: NaiveDateTime) -> (NaiveDateTime, NaiveDateTime) {
     if dt_to.naive_utc() <= time {
         return time_day(time.add(Duration::hours(1)));
     }
-    return (dt.naive_utc(), dt_to.naive_utc());
+    (dt.naive_utc(), dt_to.naive_utc())
 }
 
 pub fn time_month(time: NaiveDateTime) -> (NaiveDateTime, NaiveDateTime) {
@@ -127,7 +127,7 @@ pub fn time_month(time: NaiveDateTime) -> (NaiveDateTime, NaiveDateTime) {
     if dt_to.naive_utc() <= time {
         return time_month(time.add(Duration::days(1)));
     }
-    return (dt.naive_utc(), dt_to.naive_utc());
+    (dt.naive_utc(), dt_to.naive_utc())
 }
 
 #[cfg(test)]

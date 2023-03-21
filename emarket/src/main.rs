@@ -26,8 +26,8 @@ use entsoe::EntSOE;
 
 use crate::aggregator::time_day;
 use crate::aggregator::time_month;
+use crate::aggregator::AggregatorByDate;
 use crate::aggregator::Aggregators;
-use crate::aggregator::AgregatorByDate;
 use crate::limiter::RateLimiter;
 use crate::redis::RedisClient;
 use clap::Command;
@@ -87,14 +87,14 @@ async fn main() -> Result<(), Error> {
     log::info!("Redis OK");
 
     let aggregator_days =
-        AgregatorByDate::new(Box::new(db_hours.clone()), Box::new(db_days), time_day)
+        AggregatorByDate::new(Box::new(db_hours.clone()), Box::new(db_days), time_day)
             .await
             .unwrap_or_else(|err| {
                 log::error!("aggregator days init: {err}");
                 process::exit(1)
             });
     let aggregator_months =
-        AgregatorByDate::new(Box::new(db_hours.clone()), Box::new(db_months), time_month)
+        AggregatorByDate::new(Box::new(db_hours.clone()), Box::new(db_months), time_month)
             .await
             .unwrap_or_else(|err| {
                 log::error!("aggregator months init: {err}");
