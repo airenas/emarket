@@ -24,6 +24,9 @@ use tokio_util::sync::CancellationToken;
 use emarket::Config;
 use entsoe::EntSOE;
 
+use crate::aggregator::time_day;
+use crate::aggregator::time_month;
+use crate::aggregator::Aggregators;
 use crate::aggregator::AgregatorByDate;
 use crate::limiter::RateLimiter;
 use crate::redis::RedisClient;
@@ -66,13 +69,13 @@ async fn main() -> Result<(), Error> {
             log::error!("redis client init: {err}");
             process::exit(1)
         });
-    let db_days = RedisClient::new(pool.clone(), "np_lt_days2")
+    let db_days = RedisClient::new(pool.clone(), "np_lt_d")
         .await
         .unwrap_or_else(|err| {
             log::error!("redis client init: {err}");
             process::exit(1)
         });
-    let db_months = RedisClient::new(pool, "np_lt_months")
+    let db_months = RedisClient::new(pool, "np_lt_m")
         .await
         .unwrap_or_else(|err| {
             log::error!("redis client init: {err}");
@@ -83,13 +86,23 @@ async fn main() -> Result<(), Error> {
     boxed_db_days.live().await.unwrap();
     log::info!("Redis OK");
 
-    let aggregator = AgregatorByDate::new(Box::new(db_hours.clone()), Box::new(db_days))
-        .await
-        .unwrap_or_else(|err| {
-            log::error!("aggregator init: {err}");
-            process::exit(1)
-        });
-    let boxed_aggregator: Box<dyn Aggregator + Send + Sync> = Box::new(aggregator);
+    let aggregator_days =
+        AgregatorByDate::new(Box::new(db_hours.clone()), Box::new(db_days), time_day)
+            .await
+            .unwrap_or_else(|err| {
+                log::error!("aggregator days init: {err}");
+                process::exit(1)
+            });
+    let aggregator_months =
+        AgregatorByDate::new(Box::new(db_hours.clone()), Box::new(db_months), time_month)
+            .await
+            .unwrap_or_else(|err| {
+                log::error!("aggregator months init: {err}");
+                process::exit(1)
+            });
+    let boxed_aggregator: Box<dyn Aggregator + Send + Sync> = Box::new(Aggregators {
+        aggregators: vec![Box::new(aggregator_days), Box::new(aggregator_months)],
+    });
 
     let limiter = RateLimiter::new().unwrap();
     let boxed_limiter: Box<dyn Limiter> = Box::new(limiter);

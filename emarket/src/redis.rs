@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-use deadpool_redis::{Config, Pool, Runtime};
+use deadpool_redis::{Pool};
 use emarket::{
     data::{DBSaver, Data},
     utils::to_time,
@@ -17,10 +17,6 @@ pub struct RedisClient {
 
 impl RedisClient {
     pub async fn new(pool: Pool, ts_name: &str) -> Result<RedisClient, Box<dyn Error>> {
-        // let cfg = Config::from_url(db_url);
-        // let pool = cfg.create_pool(Some(Runtime::Tokio1))?;
-
-        // let ts_name = "np_lt";
         let mut conn = pool.get().await?;
         let r: Result<bool, RedisError> = conn
             .ts_create(
