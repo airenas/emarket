@@ -10,16 +10,23 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        container: [importer, importer-ws]
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+
+      - name: Compute short sha
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
         with:
           images: |
-            airenas/emarket-importer
+            airenas/emarket-${{ matrix.container }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -43,9 +50,9 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./build/importer/Dockerfile
+          file: ./build/${{ matrix.container }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_VERSION=${{ github.ref_name }}-${GITHUB_SHA::7}
+            BUILD_VERSION=${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}
