@@ -7,11 +7,14 @@ on:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        container: [importer, importer-ws]
     steps:
       - uses: actions/checkout@v2
 
-      - name: Build container
-        run: cd build/importer && make dbuild version=latest
+      - name: Build container ${{ matrix.container }}
+        run: cd build/${{ matrix.container }} && make dbuild version=latest
 
       - name: Run Snyk to check Docker image for vulnerabilities
         continue-on-error: true
@@ -19,12 +22,14 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          image: airenas/emarket-importer:latest
-          args: --file=build/importer/Dockerfile
+          image: airenas/emarket-${{ matrix.container }}:latest
+          args: --file=build/${{ matrix.container }}/Dockerfile
 
-      - name: Upload snyk result to GitHub Code Scanning
+      - name: Make sarif file copy
+        run: mv snyk.sarif snyk-${{ matrix.container }}.sarif
+
+      - name: Upload snyk ${{ matrix.container }} result to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v2
         with:
-          sarif_file: snyk.sarif
-          category: emarket-importer
-      
+          sarif_file: snyk-${{ matrix.container }}.sarif
+          category: ${{ matrix.container }}-analysis
