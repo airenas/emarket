@@ -4,6 +4,10 @@ run:
 	RUST_LOG=DEBUG cargo run --bin importer -- --key $(KEY) --redis $(REDIS_URL)
 .PHONY: run
 ###############################################################################
+run/ws:
+	RUST_LOG=DEBUG cargo run --bin importer-ws -- --redis $(REDIS_URL)
+.PHONY: run/ws
+###############################################################################
 run/build: build/local
 	RUST_LOG=DEBUG target/release/importer --key $(KEY) --redis $(REDIS_URL)
 .PHONY: run/build
