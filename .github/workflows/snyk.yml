@@ -7,6 +7,10 @@ on:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read 
     strategy:
       matrix:
         container: [importer, importer-ws]
