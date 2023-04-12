@@ -48,4 +48,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_VERSION=${{ github.ref_name }}-${GITHUB_SHA::7}
