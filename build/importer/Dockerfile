@@ -11,9 +11,8 @@ WORKDIR /src/
 
 COPY emarket /src
 
-# RUN --mount=type=cache,target=/usr/local/cargo/registry \
-#       CARGO_APP_VERSION=$BUILD_VERSION cargo build --release
-RUN CARGO_APP_VERSION=$BUILD_VERSION cargo build --release      
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+      CARGO_APP_VERSION=$BUILD_VERSION cargo build --release
 #########################################################################################
 FROM debian:buster-slim as runner
 
