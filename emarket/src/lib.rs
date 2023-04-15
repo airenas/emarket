@@ -5,9 +5,12 @@ use chrono::{Duration, NaiveDateTime, Utc};
 use clap::ArgMatches;
 use data::{Aggregator, DBSaver, Data, Limiter, Loader};
 use std::error::Error;
-use tokio::sync::{
-    mpsc::{Receiver, Sender},
-    Mutex,
+use tokio::{
+    sync::{
+        mpsc::{Receiver, Sender},
+        Mutex,
+    },
+    time::sleep,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -214,11 +217,14 @@ pub async fn aggregate_start(
         let td = receiver.recv().await;
         log::trace!("got aggregate indicator");
         match td {
-            Some(td) => worker
-                .work(td)
-                .await
-                .map(|_v| ())
-                .map_err(|e| format!("save err: {e}"))?,
+            Some(td) => {
+                sleep(tokio::time::Duration::from_millis(1000)).await; // problems with selecting new data from redis - wait a bit before aggregation
+                worker
+                    .work(td)
+                    .await
+                    .map(|_v| ())
+                    .map_err(|e| format!("save err: {e}"))?;
+            }
             None => break,
         }
     }
