@@ -26,8 +26,8 @@ impl RedisClient {
     pub async fn load(
         &self,
         ts_name: &str,
-        from: Option<u64>,
-        to: Option<u64>,
+        from: Option<i64>,
+        to: Option<i64>,
     ) -> Result<Vec<MarketData>, Box<dyn Error>> {
         log::debug!("invoke load");
         let mut conn = self.pool.get().await?;

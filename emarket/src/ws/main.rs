@@ -17,7 +17,7 @@ use clap::Command;
 use config::Config;
 use tokio::signal::unix::{signal, SignalKind};
 
-use crate::handlers::PricesParams;
+use crate::handlers::{PricesParams, SummaryParams};
 use crate::redis::RedisClient;
 
 #[tokio::main]
@@ -76,10 +76,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let prices_route = warp::get()
         .and(warp::path("prices"))
         .and(warp::query::<PricesParams>())
-        .and(with_service(srv))
+        .and(with_service(srv.clone()))
         .and_then(handlers::prices_handler);
+    let summary_route = warp::get()
+        .and(warp::path("summary"))
+        .and(warp::query::<SummaryParams>())
+        .and(with_service(srv))
+        .and_then(handlers::summary_handler);
     let routes = live_route
-        .or(prices_route)
+        .or(prices_route).or(summary_route)
         .with(warp::cors().allow_any_origin())
         .recover(errors::handle_rejection);
 
