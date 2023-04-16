@@ -94,7 +94,7 @@ pub async fn summary_handler(
         current_month_avg: get_value(&srv.redis, "np_lt_m", month(at, 0), month(at, 1)).await?,
         previous_month_avg: get_value(&srv.redis, "np_lt_m", month(at, -1), month(at, 0)).await?,
         today_avg: get_value(&srv.redis, "np_lt_d", day(at, 0), day(at, 1)).await?,
-        tomorrow_avg: get_value(&srv.redis, "np_lt_d", day(at, 1), day(at, 2)).await?,
+        tomorrow_avg: get_value_full(&srv.redis, "np_lt_d", day(at, 1), day(at, 3), 2).await?,
         yesterday_avg: get_value(&srv.redis, "np_lt_d", day(at, -1), day(at, 0)).await?,
         last_30d_avg: get_avg(&srv.redis, "np_lt_d", day(at, -29), day(at, 1)).await?,
         last_7_avg: get_avg(&srv.redis, "np_lt_d", day(at, -6), day(at, 1)).await?,
@@ -117,6 +117,16 @@ async fn get_value(
     from: NaiveDateTime,
     to: NaiveDateTime,
 ) -> Result<Option<f64>> {
+    get_value_full(redis, ts_name, from, to, 1).await
+}
+
+async fn get_value_full(
+    redis: &crate::redis::RedisClient,
+    ts_name: &str,
+    from: NaiveDateTime,
+    to: NaiveDateTime,
+    min_items: usize,
+) -> Result<Option<f64>> {
     let res = redis
         .load(
             ts_name,
@@ -126,7 +136,8 @@ async fn get_value(
         .await
         .map_err(|e| OtherError { msg: e.to_string() })?;
     log::debug!("{} len res {} - {}-{}", ts_name, res.len(), from, to);
-    if res.is_empty() {
+    if res.len() < min_items {
+        log::info!("{} < {} - return none", res.len(), min_items);
         return Ok(None);
     }
     Ok(Some(res[0].price))
