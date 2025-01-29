@@ -1,14 +1,9 @@
 -include .env
 ##################################################
-start: .data/.grafana.init
+start: 
 	docker compose up -d
 .PHONY: start
 
-.data/grafana:
-	mkdir -p $@
-.data/.grafana.init: | .data/grafana
-	sudo chown 472:472 .data/grafana
-	touch $@
 ##################################################
 redeploy/importer: 
 	docker compose up --detach --build importer
