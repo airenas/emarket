@@ -1,7 +1,6 @@
--include ../../version
 #####################################################################################
 service=airenas/emarket-importer
-version?=$(importer_version)
+version?=dev
 ########### DOCKER ##################################################################
 tag=$(service):$(version)
 

@@ -48,9 +48,22 @@ services:
     networks:
       - emarket
     environment:
-      - RUST_LOG=INFO
+      - RUST_LOG=DEBUG,serde_xml_rs=WARN,hyper=INFO
       - KEY=${KEY}
       - REDIS_URL=redis://redis:6379
+
+  importer-ws:
+    image: airenas/emarket-importer-ws:${IMPORTER_VERSION}
+    container_name: emarket-importer-ws
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - emarket
+    ports:
+      - "8000:8000"  
+    environment:
+      - RUST_LOG=DEBUG,serde_xml_rs=WARN,hyper=INFO
+      - REDIS_URL=redis://redis:6379    
 
 volumes:
   redis:

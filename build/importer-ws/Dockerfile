@@ -1,7 +1,7 @@
 #########################################################################################
 ## docker will invoke this file from ../.. dir in order to access code
 #########################################################################################
-FROM rust:1.67-buster as builder
+FROM rust:1.84-bullseye AS builder
 
 # RUN apk --update add openssl-dev musl-dev
 
@@ -13,24 +13,26 @@ COPY emarket /src
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
       CARGO_APP_VERSION=$BUILD_VERSION cargo build --release
+
 #########################################################################################
-FROM debian:buster-slim as runner
+FROM gcr.io/distroless/cc-debian11 AS ssl
 
-RUN apt-get update && apt-get -y install openssl ca-certificates
+#########################################################################################
+# Debian 12 does not include ssl libs
+FROM gcr.io/distroless/cc-debian12 AS runner
+#########################################################################################
 
+COPY LICENSE /licenses/LICENSE-gnu
+
+WORKDIR /app
+
+### /ssl
+COPY --from=ssl /usr/lib/x86_64-linux-gnu/libssl.so.* /lib/x86_64-linux-gnu/
+COPY --from=ssl /usr/lib/x86_64-linux-gnu/libcrypto.so.* /lib/x86_64-linux-gnu/
+#########################################################################################
 
 ARG BUILD_VERSION=0.1
 
-WORKDIR /app
-ENV UID=999
-
-RUN addgroup --gid $UID app && useradd -r -M -u $UID -g app app   
-RUN mkdir -p /app && chown -R app:app /app   
-
 COPY --from=builder /src/target/release/importer-ws /app/
 
-RUN chown app:app /app/* /app
- 
-USER app
-
-ENTRYPOINT ["./importer-ws"]
+ENTRYPOINT ["/app/importer-ws"]
