@@ -19,7 +19,7 @@ impl RedisClient {
     pub async fn live(&self) -> std::result::Result<String, Box<dyn Error>> {
         log::debug!("invoke live");
         let mut conn = self.pool.get().await?;
-        redis::cmd("PING").query_async(&mut conn).await?;
+        let _: () = redis::cmd("PING").query_async(&mut conn).await?;
         Ok("ok".to_string())
     }
 

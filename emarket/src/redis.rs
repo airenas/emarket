@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-use deadpool_redis::{Pool};
+use deadpool_redis::Pool;
 use emarket::{
     data::{DBSaver, Data},
     utils::to_time,
@@ -48,7 +48,7 @@ impl DBSaver for RedisClient {
     async fn live(&self) -> std::result::Result<String, Box<dyn Error>> {
         log::debug!("invoke live");
         let mut conn = self.pool.get().await?;
-        redis::cmd("PING").query_async(&mut conn).await?;
+        let _: () = redis::cmd("PING").query_async(&mut conn).await?;
         Ok("ok".to_string())
     }
 
@@ -71,12 +71,13 @@ impl DBSaver for RedisClient {
 
     async fn save(&self, data: &Data) -> Result<bool, Box<dyn Error>> {
         let mut conn = self.pool.get().await?;
-        conn.ts_add(
-            self.ts_name.as_str(),
-            data.at.timestamp_millis(),
-            data.price,
-        )
-        .await?;
+        let _: () = conn
+            .ts_add(
+                self.ts_name.as_str(),
+                data.at.and_utc().timestamp_millis(),
+                data.price,
+            )
+            .await?;
         Ok(true)
     }
 
@@ -91,8 +92,8 @@ impl DBSaver for RedisClient {
         let list: TsRange<u64, f64> = conn
             .ts_range(
                 self.ts_name.as_str(),
-                from.timestamp_millis(),
-                to.timestamp_millis() - 1,  // imitate range [from, to)
+                from.and_utc().timestamp_millis(),
+                to.and_utc().timestamp_millis() - 1, // imitate range [from, to)
                 none_int,
                 None,
             )

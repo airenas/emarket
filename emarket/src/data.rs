@@ -42,20 +42,20 @@ pub trait DBSaver {
 }
 
 #[async_trait]
-pub trait Limiter {
+pub trait Limiter: Send + Sync {
     async fn wait(&self) -> Result<bool, Box<dyn Error>>;
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
 
     use crate::data::Data;
     #[test]
     fn to_string() {
         assert_eq!(
             Data {
-                at: NaiveDateTime::from_timestamp_millis(10).unwrap(),
+                at: DateTime::from_timestamp_millis(10).unwrap().naive_utc(),
                 price: 1.0
             }
             .to_str(),

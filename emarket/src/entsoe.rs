@@ -156,7 +156,7 @@ struct EntSOEPoint {
 #[cfg(test)]
 mod tests {
     use approx::assert_relative_eq;
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
 
     use crate::entsoe::{map_to_data, to_time_str, EntSOEDoc};
     use serde_xml_rs::from_str;
@@ -229,19 +229,27 @@ mod tests {
         let res = map_to_data(deserialized).unwrap();
         assert_eq!(res.len(), 2);
         assert_relative_eq!(res[0].price, 50.05);
-        assert_eq!(res[0].at.timestamp_millis(), 1640991600000);
+        assert_eq!(res[0].at.and_utc().timestamp_millis(), 1640991600000);
         assert_relative_eq!(res[1].price, 41.33);
-        assert_eq!(res[1].at.timestamp_millis(), 1640995200000);
+        assert_eq!(res[1].at.and_utc().timestamp_millis(), 1640995200000);
     }
 
     #[test]
     fn formats_time() {
         assert_eq!(
-            to_time_str(NaiveDateTime::from_timestamp_millis(1640991600000).unwrap()),
+            to_time_str(
+                DateTime::from_timestamp_millis(1640991600000)
+                    .unwrap()
+                    .naive_utc()
+            ),
             "202112312300"
         );
         assert_eq!(
-            to_time_str(NaiveDateTime::from_timestamp_millis(1640995200000).unwrap()),
+            to_time_str(
+                DateTime::from_timestamp_millis(1640995200000)
+                    .unwrap()
+                    .naive_utc()
+            ),
             "202201010000"
         );
     }

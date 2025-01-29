@@ -110,7 +110,7 @@ async fn main() -> Result<(), Error> {
     });
 
     let limiter = RateLimiter::new().unwrap();
-    let boxed_limiter: Box<dyn Limiter> = Box::new(limiter);
+    let boxed_limiter: Box<dyn Limiter> = Box::new(limiter) ;
     let limiter = Arc::new(Mutex::new(boxed_limiter));
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);

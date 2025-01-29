@@ -1,9 +1,11 @@
-use chrono::{Datelike, Days, NaiveDateTime, TimeZone};
+use chrono::{DateTime, Datelike, Days, NaiveDateTime, TimeZone};
 use chrono_tz::Europe::Vilnius;
 use rand::Rng;
 
 pub fn to_time(t: u64) -> NaiveDateTime {
-    NaiveDateTime::from_timestamp_millis(i64::try_from(t).unwrap()).expect("wrong millis")
+    DateTime::from_timestamp_millis(i64::try_from(t).unwrap())
+        .expect("wrong millis")
+        .naive_utc()
 }
 
 pub fn time_day_vilnius(time: NaiveDateTime, shift_days: i64) -> NaiveDateTime {

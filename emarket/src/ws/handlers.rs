@@ -130,8 +130,8 @@ async fn get_value_full(
     let res = redis
         .load(
             ts_name,
-            Some(from.timestamp_millis()),
-            Some(to.timestamp_millis()),
+            Some(from.and_utc().timestamp_millis()),
+            Some(to.and_utc().timestamp_millis()),
         )
         .await
         .map_err(|e| OtherError { msg: e.to_string() })?;
@@ -152,8 +152,8 @@ async fn get_avg(
     let res = redis
         .load(
             ts_name,
-            Some(from.timestamp_millis()),
-            Some(to.timestamp_millis()),
+            Some(from.and_utc().timestamp_millis()),
+            Some(to.and_utc().timestamp_millis()),
         )
         .await
         .map_err(|e| OtherError { msg: e.to_string() })?;
