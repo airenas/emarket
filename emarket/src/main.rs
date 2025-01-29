@@ -12,6 +12,7 @@ use emarket::data::Aggregator;
 use emarket::data::Data;
 use emarket::data::Limiter;
 use emarket::WorkingData;
+use emarket::TN_HOUR;
 use emarket::{run_exit_indicator, saver_start};
 use reqwest::Error;
 use std::process;
@@ -82,7 +83,7 @@ async fn main_int(args: Args) -> Result<(), Error> {
             process::exit(1)
         });
 
-    let db_hours = RedisClient::new(pool.clone(), "np_lt")
+    let db_hours = RedisClient::new(pool.clone(), TN_HOUR)
         .await
         .unwrap_or_else(|err| {
             log::error!("redis client init: {err}");

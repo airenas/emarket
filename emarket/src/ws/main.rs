@@ -88,21 +88,18 @@ async fn main_int(args: Args) -> Result<(), Box<dyn Error>> {
 
     let srv = Arc::new(RwLock::new(Service { redis: db }));
 
-    let metrics = Metrics::new()?;
-
-    let metrics_cl = metrics.clone();
-
     let helper_router = axum::Router::new()
         .route("/live", get(handlers::live::handler))
         .with_state(srv.clone());
 
+    let metrics = Metrics::new()?;
     let main_router = Router::new()
         .route("/summary", get(handlers::summary::handler))
         .route("/prices", get(handlers::prices::handler))
         .route("/np/now", get(handlers::now::handler))
         .with_state(srv.clone())
         .layer(middleware::from_fn(move |req, next| {
-            let mc = metrics_cl.clone();
+            let mc = metrics.clone();
             async move { mc.observe(req, next).await }
         }));
 
