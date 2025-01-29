@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use emarket::data::{Data, Loader};
+use reqwest::StatusCode;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use serde::{Deserialize, Serialize};
@@ -37,15 +38,35 @@ impl EntSOE {
             key: key.to_string(),
         })
     }
+
+    async fn text(
+        &self,
+        url: &str,
+        want: StatusCode,
+    ) -> std::result::Result<String, Box<dyn Error>> {
+        tracing::debug!(url, "calling...");
+        let response = self.client.get(url).send().await?;
+
+        // Validate the status code
+        let status = response.status();
+        let txt = response.text().await?;
+        tracing::trace!(txt, status = status.as_u16(), "got");
+        if status != want {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("status code: {}, body: {}", status, txt),
+            )));
+        }
+        Ok(txt)
+    }
 }
 
 #[async_trait]
 impl Loader for EntSOE {
     async fn live(&self) -> std::result::Result<String, Box<dyn Error>> {
         let url = format!("{}?securityToken={}", self.url, self.key);
-        log::debug!("Calling... {} ", url);
-        let content = self.client.get(url).send().await?.text().await?;
-        log::trace!("response: {}", content);
+        let content = self.text(&url, StatusCode::BAD_REQUEST).await?; // 400 is expected, NO TIME DEFINED
+        tracing::trace!(content, "got");
         Ok(content)
     }
     async fn retrieve(
@@ -57,13 +78,11 @@ impl Loader for EntSOE {
         let url = format!(
             "{}?securityToken={}&documentType={}&in_Domain={}&out_Domain={}&periodStart={}&periodEnd={}",
             self.url, self.key, self.document, self.domain, self.domain, to_time_str(from), to_time_str(to));
-        log::debug!("Calling... {} ", url);
-        let txt = self.client.get(url).send().await?.text().await?;
-        log::trace!("Got {} ", txt);
+        let txt = self.text(&url, StatusCode::OK).await?;
         let in_res = from_str::<EntSOEDoc>(txt.as_str())?;
-        log::debug!("got {} timeseries", in_res.timeseries.len());
+        tracing::debug!(len = in_res.timeseries.len(), "got timeseries");
         let res = map_to_data(in_res)?;
-        log::debug!("extracted {} points", res.len());
+        tracing::debug!(len = res.len(), "extracted points");
         Ok(res)
     }
 }
@@ -137,7 +156,7 @@ struct EntSOEPoint {
 #[cfg(test)]
 mod tests {
     use approx::assert_relative_eq;
-    use chrono::{NaiveDateTime};
+    use chrono::NaiveDateTime;
 
     use crate::entsoe::{map_to_data, to_time_str, EntSOEDoc};
     use serde_xml_rs::from_str;
