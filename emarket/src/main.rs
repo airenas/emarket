@@ -5,7 +5,7 @@ mod redis;
 
 use chrono::NaiveDate;
 use chrono::NaiveDateTime;
-use clap::Arg;
+use clap::Parser;
 use deadpool_redis::Runtime;
 use emarket::aggregate_start;
 use emarket::data::Aggregator;
@@ -21,7 +21,6 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use emarket::Config;
 use entsoe::EntSOE;
 
 use crate::aggregator::time_day;
@@ -30,38 +29,53 @@ use crate::aggregator::AggregatorByDate;
 use crate::aggregator::Aggregators;
 use crate::limiter::RateLimiter;
 use crate::redis::RedisClient;
-use clap::Command;
 use emarket::data::DBSaver;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+#[derive(Parser, Debug)]
+#[command(version = env!("CARGO_APP_VERSION"), name = "importer", about="Import entsoe day ahead prices to local timeseries DB", author ="Airenas V.<airenass@gmail.com>", long_about = None)]
+struct Args {
+    /// EntSOE query document type
+    #[arg(long, short = 'd', env, default_value = "A44")]
+    document: String,
+    /// EntSOE query domain value
+    #[arg(long, short = 'm', env, default_value = "10YLT-1001A0008Q")]
+    domain: String,
+    /// EntSOE auth key
+    #[arg(long, env, required = true)]
+    key: String,
+    /// redis url
+    #[arg(long, short, env, default_value = "")]
+    redis_url: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     tracing_subscriber::registry()
-    .with(tracing_subscriber::EnvFilter::from_default_env())
-    .with(tracing_subscriber::fmt::Layer::default().compact())
-    .init();
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(tracing_subscriber::fmt::Layer::default().compact())
+        .init();
+    let args = Args::parse();
+    if let Err(e) = main_int(args).await {
+        tracing::error!("{}", e);
+        return Err(e);
+    }
+    Ok(())
+}
 
-    let cfg = app_config().unwrap_or_else(|err| {
-        log::error!("problem parsing arguments: {err}");
-        process::exit(1)
-    });
-
-    log::info!("Starting EMArket importer");
-    log::info!("Version      : {}", cfg.version);
-    log::info!("Domain       : {}", cfg.domain);
-    log::info!("Documnet     : {}", cfg.document);
-    log::info!("Redis URL    : {}", cfg.redis_url);
-    if cfg.key.len() > 4 {
-        log::info!(
-            "Key          : {}...{}",
-            &cfg.key[..2],
-            &cfg.key[cfg.key.len() - 2..]
-        );
+async fn main_int(args: Args) -> Result<(), Error> {
+    tracing::info!("Starting EMArket importer");
+    tracing::info!(version = env!("CARGO_APP_VERSION"));
+    tracing::info!(domain=args.domain);
+    tracing::info!(document=args.document);
+    tracing::info!(url=args.redis_url, "redis");
+    if args.key.len() > 4 {
+        tracing::info!(key=format!("{}...{}", &args.key[..2], &args.key[args.key.len() - 2..]));
     }
 
-    let pool = deadpool_redis::Config::from_url(&cfg.redis_url)
+    let pool = deadpool_redis::Config::from_url(&args.redis_url)
         .create_pool(Some(Runtime::Tokio1))
         .unwrap_or_else(|err| {
             log::error!("redis poll init: {err}");
@@ -110,7 +124,7 @@ async fn main() -> Result<(), Error> {
     });
 
     let limiter = RateLimiter::new().unwrap();
-    let boxed_limiter: Box<dyn Limiter> = Box::new(limiter) ;
+    let boxed_limiter: Box<dyn Limiter> = Box::new(limiter);
     let limiter = Arc::new(Mutex::new(boxed_limiter));
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
@@ -119,7 +133,7 @@ async fn main() -> Result<(), Error> {
     let (tx_wait_exit, mut rx_wait_exit) = tokio::sync::mpsc::channel(1);
     let (tx_exit_indicator, mut rx_exit_indicator) = tokio::sync::mpsc::unbounded_channel();
 
-    let loader = EntSOE::new(&cfg.document, &cfg.domain, &cfg.key).unwrap();
+    let loader = EntSOE::new(&args.document, &args.domain, &args.key).unwrap();
 
     //     let interval = config.interval.clone();
     let int_limiter = limiter.clone();
@@ -204,51 +218,4 @@ async fn start_aggregate_loop(
     aggregate_start(db_saver, receiver).await?;
     log::info!("exit aggregate loop");
     Ok(())
-}
-
-fn app_config() -> Result<Config, &'static str> {
-    let app_version = option_env!("CARGO_APP_VERSION").unwrap_or("dev");
-
-    let cmd = Command::new("importer")
-        .version(app_version)
-        .author("Airenas V.<airenass@gmail.com>")
-        .about("Import entsoe day ahead prices to local timeseries DB")
-        .arg(
-            Arg::new("document")
-                .short('d')
-                .long("document")
-                .value_name("DOCUMENT")
-                .help("EntSOE query document type")
-                .env("DOCUMENT")
-                .default_value("A44"),
-        )
-        .arg(
-            Arg::new("domain")
-                .short('m')
-                .long("domain")
-                .value_name("DOMAIN")
-                .env("DOMAIN")
-                .help("EntSOE query domain value")
-                .default_value("10YLT-1001A0008Q"),
-        )
-        .arg(
-            Arg::new("key")
-                .short('k')
-                .long("key")
-                .value_name("KEY")
-                .env("KEY")
-                .help("EntSOE auth key"),
-        )
-        .arg(
-            Arg::new("redis")
-                .short('r')
-                .long("redis")
-                .value_name("REDIS_URL")
-                .env("REDIS_URL")
-                .help("Redis URL"),
-        )
-        .get_matches();
-    let mut config = Config::build(&cmd)?;
-    config.version = app_version.into();
-    Ok(config)
 }

@@ -2,7 +2,6 @@ pub mod data;
 pub mod utils;
 
 use chrono::{Duration, NaiveDateTime, Utc};
-use clap::ArgMatches;
 use data::{Aggregator, DBSaver, Data, Limiter, Loader};
 use std::error::Error;
 use tokio::{
@@ -15,42 +14,6 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::utils::jitter;
-
-pub struct Config {
-    pub document: String,
-    pub domain: String,
-    pub key: String,
-    pub redis_url: String,
-    pub version: String,
-}
-
-impl Config {
-    pub fn build(args: &ArgMatches) -> Result<Config, &'static str> {
-        let doc: &String = match args.get_one::<String>("document") {
-            Some(v) => Ok(v),
-            None => Err("no document param provided"),
-        }?;
-        let domain = match args.get_one::<String>("domain") {
-            Some(v) => Ok(v),
-            None => Err("no domain provided"),
-        }?;
-        let key = match args.get_one::<String>("key") {
-            Some(v) => Ok(v),
-            None => Err("no key provided"),
-        }?;
-        let redis_url = match args.get_one::<String>("redis") {
-            Some(v) => Ok(v),
-            None => Err("no redis URL provided"),
-        }?;
-        Ok(Config {
-            key: key.to_string(),
-            document: doc.to_string(),
-            domain: domain.to_string(),
-            redis_url: redis_url.to_string(),
-            version: "dev".to_string(),
-        })
-    }
-}
 
 type LimiterM = std::sync::Arc<Mutex<Box<dyn Limiter>>>;
 type ResultM = Result<(), Box<dyn Error>>;

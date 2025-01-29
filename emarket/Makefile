@@ -1,11 +1,11 @@
 -include Makefile.options
 ###############################################################################
 run:
-	RUST_LOG=DEBUG cargo run --bin importer -- --key $(KEY) --redis $(REDIS_URL)
+	RUST_LOG=DEBUG cargo run --bin importer -- --key $(KEY) --redis-url $(REDIS_URL)
 .PHONY: run
 ###############################################################################
 run/ws:
-	RUST_LOG=DEBUG cargo run --bin importer-ws -- --redis $(REDIS_URL)
+	RUST_LOG=DEBUG cargo run --bin importer-ws -- --redis-url $(REDIS_URL)
 .PHONY: run/ws
 ###############################################################################
 run/build: build/local

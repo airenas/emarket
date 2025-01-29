@@ -1,20 +1,17 @@
-mod config;
 mod data;
 mod errors;
 mod handlers;
 mod redis;
 
-use clap::Arg;
+use clap::{command, Parser};
 use data::Service;
 use deadpool_redis::Runtime;
 use std::process;
 use std::{error::Error, sync::Arc};
-use tokio::sync::{RwLock};
+use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use warp::Filter;
 
-use clap::Command;
-use config::Config;
 use tokio::signal::unix::{signal, SignalKind};
 
 use crate::handlers::{PricesParams, SummaryParams};
@@ -22,22 +19,36 @@ use crate::redis::RedisClient;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+#[derive(Parser, Debug)]
+#[command(version = env!("CARGO_APP_VERSION"), name = "importer-ws", about="Service for serving emarket data", author ="Airenas V.<airenass@gmail.com>", long_about = None)]
+struct Args {
+    /// Server port
+    #[arg(long, env, default_value = "8000")]
+    port: u16,
+    /// Redis url
+    #[arg(long, short, env, default_value = "")]
+    redis_url: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::registry()
-    .with(tracing_subscriber::EnvFilter::from_default_env())
-    .with(tracing_subscriber::fmt::Layer::default().compact())
-    .init();
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(tracing_subscriber::fmt::Layer::default().compact())
+        .init();
+    let args = Args::parse();
+    if let Err(e) = main_int(args).await {
+        tracing::error!("{}", e);
+        return Err(e);
+    }
+    Ok(())
+}
 
-    let cfg = app_config().unwrap_or_else(|err| {
-        log::error!("problem parsing arguments: {err}");
-        process::exit(1)
-    });
-
-    log::info!("Starting Importer service");
-    log::info!("Version      : {}", cfg.version);
-    log::info!("Port         : {}", cfg.port);
-    log::info!("Redis URL    : {}", cfg.redis_url);
+async fn main_int(args: Args) -> Result<(), Box<dyn Error>> {
+    tracing::info!("Starting Importer service");
+    tracing::info!(version = env!("CARGO_APP_VERSION"));
+    tracing::info!(port = args.port);
+    tracing::info!(url = args.redis_url, "redis");
 
     let cancel_token = CancellationToken::new();
 
@@ -56,23 +67,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         log::debug!("expected drop tx_close");
     });
 
-    let pool = deadpool_redis::Config::from_url(&cfg.redis_url)
+    let pool = deadpool_redis::Config::from_url(&args.redis_url)
         .create_pool(Some(Runtime::Tokio1))
         .unwrap_or_else(|err| {
             log::error!("redis poll init: {err}");
             process::exit(1)
         });
 
-    let db = RedisClient::new(pool)
-        .await
-        .unwrap_or_else(|err| {
-            log::error!("redis client init: {err}");
-            process::exit(1)
-        });
+    let db = RedisClient::new(pool).await.unwrap_or_else(|err| {
+        log::error!("redis client init: {err}");
+        process::exit(1)
+    });
 
-    let srv = Arc::new(RwLock::new(Service {
-        redis: db,
-    }));
+    let srv = Arc::new(RwLock::new(Service { redis: db }));
 
     let live_route = warp::get()
         .and(warp::path("live"))
@@ -89,13 +96,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .and(with_service(srv))
         .and_then(handlers::summary_handler);
     let routes = live_route
-        .or(prices_route).or(summary_route)
+        .or(prices_route)
+        .or(summary_route)
         .with(warp::cors().allow_any_origin())
         .recover(errors::handle_rejection);
 
     let ct = cancel_token.clone();
     let (_, server) =
-        warp::serve(routes).bind_with_graceful_shutdown(([0, 0, 0, 0], cfg.port), async move {
+        warp::serve(routes).bind_with_graceful_shutdown(([0, 0, 0, 0], args.port), async move {
             ct.cancelled().await;
         });
 
@@ -113,34 +121,4 @@ fn with_service(
     srv: Arc<RwLock<Service>>,
 ) -> impl Filter<Extract = (Arc<RwLock<Service>>,), Error = std::convert::Infallible> + Clone {
     warp::any().map(move || srv.clone())
-}
-
-fn app_config() -> Result<Config, String> {
-    let app_version = option_env!("CARGO_APP_VERSION").unwrap_or("dev");
-
-    let cmd = Command::new("importer-ws")
-        .version(app_version)
-        .author("Airenas V.<airenass@gmail.com>")
-        .about("Service for serving emarket data")
-        .arg(
-            Arg::new("port")
-                .short('p')
-                .long("port")
-                .value_name("PORT")
-                .help("Service port")
-                .env("PORT")
-                .default_value("8000"),
-        )
-        .arg(
-            Arg::new("redis")
-                .short('r')
-                .long("redis")
-                .value_name("REDIS_URL")
-                .env("REDIS_URL")
-                .help("Redis URL"),
-        )
-        .get_matches();
-    let mut config = Config::build(&cmd)?;
-    config.version = app_version.into();
-    Ok(config)
 }
