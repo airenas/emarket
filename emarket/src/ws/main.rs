@@ -19,10 +19,15 @@ use tokio::signal::unix::{signal, SignalKind};
 
 use crate::handlers::{PricesParams, SummaryParams};
 use crate::redis::RedisClient;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    tracing_subscriber::registry()
+    .with(tracing_subscriber::EnvFilter::from_default_env())
+    .with(tracing_subscriber::fmt::Layer::default().compact())
+    .init();
 
     let cfg = app_config().unwrap_or_else(|err| {
         log::error!("problem parsing arguments: {err}");
