@@ -10,6 +10,7 @@ use clap::{command, Parser};
 use data::Service;
 use deadpool_redis::Runtime;
 use metrics::Metrics;
+use tower_http::cors::CorsLayer;
 use std::process;
 use std::time::Duration;
 use std::{error::Error, sync::Arc};
@@ -107,6 +108,7 @@ async fn main_int(args: Args) -> Result<(), Box<dyn Error>> {
         .merge(helper_router)
         .merge(main_router)
         .route("/metrics", get(handlers::metrics::handler))
+        .layer(CorsLayer::permissive())
         .layer((
             DefaultBodyLimit::max(1024 * 1024),
             TraceLayer::new_for_http(),
