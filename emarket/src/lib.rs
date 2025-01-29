@@ -15,6 +15,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::utils::jitter;
 
+pub const TN_HOUR: &str = "np_lt";
+
 type LimiterM = std::sync::Arc<Mutex<Box<dyn Limiter>>>;
 type ResultM = Result<(), Box<dyn Error>>;
 

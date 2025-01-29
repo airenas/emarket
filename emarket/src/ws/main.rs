@@ -99,6 +99,7 @@ async fn main_int(args: Args) -> Result<(), Box<dyn Error>> {
     let main_router = Router::new()
         .route("/summary", get(handlers::summary::handler))
         .route("/prices", get(handlers::prices::handler))
+        .route("/np/now", get(handlers::now::handler))
         .with_state(srv.clone())
         .layer(middleware::from_fn(move |req, next| {
             let mc = metrics_cl.clone();

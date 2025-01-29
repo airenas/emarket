@@ -50,7 +50,7 @@ fn day(at: i64, days: i64) -> NaiveDateTime {
     time_day_vilnius(to_time(at as u64), days)
 }
 
-async fn get_value(
+pub async fn get_value(
     redis: &crate::redis::RedisClient,
     ts_name: &str,
     from: NaiveDateTime,

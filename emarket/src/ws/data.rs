@@ -49,3 +49,10 @@ pub struct SummaryData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_7_avg: Option<f64>,
 }
+
+#[derive(Serialize)]
+pub struct NowData {
+    pub at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price: Option<f64>,
+}
