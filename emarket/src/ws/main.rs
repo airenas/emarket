@@ -1,20 +1,27 @@
 mod data;
-mod errors;
 mod handlers;
+mod metrics;
 mod redis;
 
+use axum::extract::DefaultBodyLimit;
+use axum::routing::get;
+use axum::{middleware, Router};
 use clap::{command, Parser};
 use data::Service;
 use deadpool_redis::Runtime;
+use metrics::Metrics;
 use std::process;
+use std::time::Duration;
 use std::{error::Error, sync::Arc};
+use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use warp::Filter;
+use tower_http::timeout::TimeoutLayer;
+use tower_http::trace::TraceLayer;
 
 use tokio::signal::unix::{signal, SignalKind};
 
-use crate::handlers::{PricesParams, SummaryParams};
+// use crate::handlers1::{PricesParams, SummaryParams};
 use crate::redis::RedisClient;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -81,44 +88,54 @@ async fn main_int(args: Args) -> Result<(), Box<dyn Error>> {
 
     let srv = Arc::new(RwLock::new(Service { redis: db }));
 
-    let live_route = warp::get()
-        .and(warp::path("live"))
-        .and(with_service(srv.clone()))
-        .and_then(handlers::live_handler);
-    let prices_route = warp::get()
-        .and(warp::path("prices"))
-        .and(warp::query::<PricesParams>())
-        .and(with_service(srv.clone()))
-        .and_then(handlers::prices_handler);
-    let summary_route = warp::get()
-        .and(warp::path("summary"))
-        .and(warp::query::<SummaryParams>())
-        .and(with_service(srv))
-        .and_then(handlers::summary_handler);
-    let routes = live_route
-        .or(prices_route)
-        .or(summary_route)
-        .with(warp::cors().allow_any_origin())
-        .recover(errors::handle_rejection);
+    let metrics = Metrics::new()?;
 
-    let ct = cancel_token.clone();
-    let (_, server) =
-        warp::serve(routes).bind_with_graceful_shutdown(([0, 0, 0, 0], args.port), async move {
-            ct.cancelled().await;
-        });
+    let metrics_cl = metrics.clone();
 
-    log::info!("wait for server to finish");
-    tokio::task::spawn(server).await.unwrap_or_else(|err| {
-        log::error!("{err}");
-        process::exit(1);
-    });
+    let helper_router = axum::Router::new()
+        .route("/live", get(handlers::live::handler))
+        .with_state(srv.clone());
 
-    log::info!("Bye");
+    let main_router = Router::new()
+        .route("/summary", get(handlers::summary::handler))
+        .route("/prices", get(handlers::prices::handler))
+        .with_state(srv.clone())
+        .layer(middleware::from_fn(move |req, next| {
+            let mc = metrics_cl.clone();
+            async move { mc.observe(req, next).await }
+        }));
+
+    let app = Router::new()
+        .merge(helper_router)
+        .merge(main_router)
+        .route("/metrics", get(handlers::metrics::handler))
+        .layer((
+            DefaultBodyLimit::max(1024 * 1024),
+            TraceLayer::new_for_http(),
+            TimeoutLayer::new(Duration::from_secs(10)),
+        ));
+
+    tracing::info!(port = args.port, "serving ...");
+
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", args.port)).await?;
+
+    let handle = axum_server::Handle::new();
+    let shutdown_future = shutdown_signal_handle(handle.clone(), cancel_token.clone());
+    tokio::spawn(shutdown_future);
+
+    // Run the server with graceful shutdown
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            cancel_token.cancelled().await;
+        })
+        .await?;
+
+    tracing::info!("Bye");
     Ok(())
 }
 
-fn with_service(
-    srv: Arc<RwLock<Service>>,
-) -> impl Filter<Extract = (Arc<RwLock<Service>>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || srv.clone())
+async fn shutdown_signal_handle(handle: axum_server::Handle, cancel_token: CancellationToken) {
+    cancel_token.cancelled().await;
+    tracing::trace!("Received termination signal shutting down");
+    handle.graceful_shutdown(Some(Duration::from_secs(10)));
 }

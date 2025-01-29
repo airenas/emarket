@@ -1,88 +1,28 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
-use crate::{
-    data::{Service, SummaryData},
-    errors::OtherError,
+use axum::{
+    extract::{self, Query, State},
+    Json,
 };
 use chrono::{NaiveDateTime, Utc};
-use emarket::utils::{time_day_vilnius, time_month_vilnius, to_time};
-use serde::Serialize;
-use serde_derive::Deserialize;
+use emarket::utils::{time_day_vilnius, time_month_vilnius, to_str_or_none, to_time};
+use serde::Deserialize;
 use tokio::sync::RwLock;
-use warp::{Rejection, Reply};
 
-type Result<T> = std::result::Result<T, Rejection>;
-
-#[derive(Deserialize)]
-pub struct PricesParams {
-    from: Option<i64>,
-    to: Option<i64>,
-}
+use crate::data::{ApiError, ApiResult, Service, SummaryData};
 
 #[derive(Deserialize)]
 pub struct SummaryParams {
     at: Option<i64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct PricesResult {
-    at: i64,
-    price: f64,
-}
-
-pub async fn live_handler(srv_wrap: Arc<RwLock<Service>>) -> Result<impl Reply> {
-    log::debug!("live handler");
+pub async fn handler(
+    State(srv_wrap): State<Arc<RwLock<Service>>>,
+    Query(params): Query<SummaryParams>,
+) -> ApiResult<extract::Json<SummaryData>> {
+    tracing::debug!("summary handler");
     let srv = srv_wrap.read().await;
-    let res = srv.redis.live().await;
-    match res {
-        Ok(s) => Ok(warp::reply::json(&s).into_response()),
-        Err(err) => Err(OtherError {
-            msg: err.to_string(),
-        }
-        .into()),
-    }
-}
-
-pub async fn prices_handler(
-    params: PricesParams,
-    srv_wrap: Arc<RwLock<Service>>,
-) -> Result<impl Reply> {
-    log::debug!("prices handler");
-    let srv = srv_wrap.read().await;
-    log::debug!(
-        "from = {}",
-        params
-            .from
-            .map_or_else(|| "none".to_owned(), |v| v.to_string())
-    );
-    log::debug!(
-        "to = {}",
-        params
-            .to
-            .map_or_else(|| "none".to_owned(), |v| v.to_string())
-    );
-    let res = srv.redis.load("np_lt_m", params.from, params.to).await;
-    match res {
-        Ok(s) => Ok(warp::reply::json(&s).into_response()),
-        Err(err) => Err(OtherError {
-            msg: err.to_string(),
-        }
-        .into()),
-    }
-}
-
-pub async fn summary_handler(
-    params: SummaryParams,
-    srv_wrap: Arc<RwLock<Service>>,
-) -> Result<impl Reply> {
-    log::debug!("prices handler");
-    let srv = srv_wrap.read().await;
-    log::debug!(
-        "at = {}",
-        params
-            .at
-            .map_or_else(|| "none".to_owned(), |v| v.to_string())
-    );
+    tracing::debug!(at = to_str_or_none(params.at));
 
     let at = match params.at {
         Some(a) => a,
@@ -99,8 +39,7 @@ pub async fn summary_handler(
         last_30d_avg: get_avg(&srv.redis, "np_lt_d", day(at, -29), day(at, 1)).await?,
         last_7_avg: get_avg(&srv.redis, "np_lt_d", day(at, -6), day(at, 1)).await?,
     };
-
-    Ok(warp::reply::json(&res).into_response())
+    Ok(Json(res))
 }
 
 fn month(at: i64, months: i32) -> NaiveDateTime {
@@ -116,7 +55,7 @@ async fn get_value(
     ts_name: &str,
     from: NaiveDateTime,
     to: NaiveDateTime,
-) -> Result<Option<f64>> {
+) -> anyhow::Result<Option<f64>> {
     get_value_full(redis, ts_name, from, to, 1).await
 }
 
@@ -126,7 +65,7 @@ async fn get_value_full(
     from: NaiveDateTime,
     to: NaiveDateTime,
     min_items: usize,
-) -> Result<Option<f64>> {
+) -> anyhow::Result<Option<f64>> {
     let res = redis
         .load(
             ts_name,
@@ -134,7 +73,7 @@ async fn get_value_full(
             Some(to.and_utc().timestamp_millis()),
         )
         .await
-        .map_err(|e| OtherError { msg: e.to_string() })?;
+        .map_err(|e| ApiError::Server(e.to_string()))?;
     log::debug!("{} len res {} - {}-{}", ts_name, res.len(), from, to);
     if res.len() < min_items {
         log::info!("{} < {} - return none", res.len(), min_items);
@@ -148,7 +87,7 @@ async fn get_avg(
     ts_name: &str,
     from: NaiveDateTime,
     to: NaiveDateTime,
-) -> Result<Option<f64>> {
+) -> anyhow::Result<Option<f64>> {
     let res = redis
         .load(
             ts_name,
@@ -156,7 +95,7 @@ async fn get_avg(
             Some(to.and_utc().timestamp_millis()),
         )
         .await
-        .map_err(|e| OtherError { msg: e.to_string() })?;
+        .map_err(|e| ApiError::Server(e.to_string()))?;
     log::debug!("{} len res {} - {}-{}", ts_name, res.len(), from, to);
     if res.is_empty() {
         return Ok(None);

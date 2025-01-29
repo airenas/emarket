@@ -1,9 +1,12 @@
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use emarket::data::{Data, Loader};
-use reqwest::StatusCode;
+
+use reqwest::{Client, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::RetryTransientMiddleware;
+
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::time::Duration;
@@ -21,18 +24,28 @@ pub struct EntSOE {
 
 impl EntSOE {
     pub fn new(document: &str, domain: &str, key: &str) -> Result<EntSOE, Box<dyn Error>> {
-        let client = reqwest::Client::builder()
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(5);
+        let client = Client::builder()
+            .pool_max_idle_per_host(5)
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(15))
             .build()?;
-        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(5);
-        let client = ClientBuilder::new(client)
+        let client_with_retry = ClientBuilder::new(client)
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
             .build();
 
+        // let client = reqwest::Client::builder()
+        //     .connect_timeout(Duration::from_secs(5))
+        //     .timeout(Duration::from_secs(15))
+        //     .build()?;
+        // let retry_policy = ExponentialBackoff::builder().build_with_max_retries(5);
+        // let client = ClientBuilder::new(client)
+        //     .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+        //     .build();
+
         Ok(EntSOE {
             url: "https://web-api.tp.entsoe.eu/api".to_string(),
-            client,
+            client: client_with_retry,
             document: document.to_string(),
             domain: domain.to_string(),
             key: key.to_string(),

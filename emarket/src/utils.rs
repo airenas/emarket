@@ -44,6 +44,10 @@ pub fn jitter(d: chrono::Duration) -> chrono::Duration {
     chrono::Duration::milliseconds(ms)
 }
 
+pub fn to_str_or_none(v: Option<i64>) -> String {
+    v.map_or_else(|| "none".to_owned(), |v| v.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, NaiveDate, NaiveDateTime};
