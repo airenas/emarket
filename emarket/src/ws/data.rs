@@ -8,8 +8,8 @@ pub struct Service {
 
 #[derive(Debug, Error)]
 pub enum ApiError {
-    // #[error("bad request: {0}, details: {1}")]
-    // BadRequest(String, String),
+    #[error("bad request: {0}, details: {1}")]
+    BadRequest(String, String),
     #[error("Server error: {0}")]
     Server(String),
     #[error(transparent)]

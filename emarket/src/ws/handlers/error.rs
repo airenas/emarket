@@ -8,10 +8,10 @@ use crate::data::ApiError;
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         let (status, message): (StatusCode, Cow<'static, str>) = match self {
-            // ApiError::BadRequest(msg, details) => {
-            //     tracing::warn!("{}: {}", msg, details);
-            //     (StatusCode::BAD_REQUEST, Cow::Owned(msg))
-            // }
+            ApiError::BadRequest(msg, details) => {
+                tracing::warn!("{}: {}", msg, details);
+                (StatusCode::BAD_REQUEST, Cow::Owned(msg))
+            }
             ApiError::Server(msg) => {
                 tracing::error!("{}", msg);
                 (
