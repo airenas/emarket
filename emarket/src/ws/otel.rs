@@ -13,9 +13,6 @@ use opentelemetry_sdk::trace;
 
 pub fn extract_context_from_request(req: &Request) -> Context {
     global::get_text_map_propagator(|propagator| {
-        for (key, value) in req.headers().iter() {
-            tracing::info!("Header: {} = {:?}", key, value);
-        }
         propagator.extract(&HeaderExtractor(req.headers()))
     })
 }
