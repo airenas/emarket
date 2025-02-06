@@ -123,7 +123,7 @@ async fn main_int(args: Args) -> Result<(), Box<dyn Error>> {
             DefaultBodyLimit::max(1024 * 1024),
             TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
                 tracing::trace!("request");
-                let cx = otel::extract_context_from_request(&request);
+                let cx = otel::extract_context_from_request(request);
                 tracing::trace!("{:?}", cx.span());
                 let name = format!("{} {}", request.method(), request.uri());
                 let res = tracing::info_span!(

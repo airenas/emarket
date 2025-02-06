@@ -38,7 +38,7 @@ pub fn init_tracer() -> anyhow::Result<opentelemetry_sdk::trace::TracerProvider>
             .with_endpoint(endpoint)
             .with_timeout(Duration::from_secs(5));
 
-        let tracer = opentelemetry_otlp::new_pipeline()
+        opentelemetry_otlp::new_pipeline()
             .tracing()
             .with_exporter(exporter)
             .with_trace_config(
@@ -51,8 +51,7 @@ pub fn init_tracer() -> anyhow::Result<opentelemetry_sdk::trace::TracerProvider>
                         service_name,
                     )])),
             )
-            .install_batch(runtime::Tokio)?;
-        tracer
+            .install_batch(runtime::Tokio)?
     } else {
         tracing::warn!("No OTLP endpoint");
         opentelemetry_sdk::trace::TracerProvider::builder()
