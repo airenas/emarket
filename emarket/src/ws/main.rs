@@ -4,14 +4,13 @@ mod metrics;
 mod otel;
 mod redis;
 
-use axum::extract::{DefaultBodyLimit, Request};
+use axum::extract::DefaultBodyLimit;
 use axum::routing::get;
 use axum::{middleware, Router};
 use clap::{command, Parser};
 use data::Service;
 use deadpool_redis::Runtime;
 use metrics::Metrics;
-use opentelemetry::trace::TraceContextExt;
 use std::process;
 use std::time::Duration;
 use std::{error::Error, sync::Arc};
@@ -21,7 +20,6 @@ use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use tokio::signal::unix::{signal, SignalKind};
 
@@ -121,19 +119,7 @@ async fn main_int(args: Args) -> Result<(), Box<dyn Error>> {
         .layer(CorsLayer::permissive())
         .layer((
             DefaultBodyLimit::max(1024 * 1024),
-            TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
-                tracing::trace!("request");
-                let cx = otel::extract_context_from_request(request);
-                tracing::trace!("{:?}", cx.span());
-                let name = format!("{} {}", request.method(), request.uri());
-                let res = tracing::info_span!(
-                    "request",
-                    otel.name = name,
-                    version = ?request.version(),
-                );
-                res.set_parent(cx);
-                res
-            }),
+            TraceLayer::new_for_http().make_span_with(otel::make_span),
             TimeoutLayer::new(Duration::from_secs(10)),
         ));
 

@@ -10,12 +10,7 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace;
-
-pub fn extract_context_from_request(req: &Request) -> Context {
-    global::get_text_map_propagator(|propagator| {
-        propagator.extract(&HeaderExtractor(req.headers()))
-    })
-}
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 pub fn init_tracer() -> anyhow::Result<opentelemetry_sdk::trace::TracerProvider> {
     let service_name = env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "importer-ws".to_string());
@@ -59,4 +54,26 @@ pub fn init_tracer() -> anyhow::Result<opentelemetry_sdk::trace::TracerProvider>
     global::set_tracer_provider(tracer_provider.clone());
 
     Ok(tracer_provider)
+}
+
+pub fn make_span(req: &Request) -> tracing::Span {
+    let cx = extract_context_from_request(req);
+    // tracing::trace!("{:?}", cx.span());
+
+    let path = req.uri().path();
+    let name = format!("{} {}", req.method(), path);
+
+    let res = tracing::info_span!(
+        "request",
+        otel.name = name,
+        version = ?req.version(),
+    );
+    res.set_parent(cx);
+    res
+}
+
+fn extract_context_from_request(req: &Request) -> Context {
+    global::get_text_map_propagator(|propagator| {
+        propagator.extract(&HeaderExtractor(req.headers()))
+    })
 }
