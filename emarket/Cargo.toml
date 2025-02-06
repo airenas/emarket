@@ -36,6 +36,12 @@ tower-http = { version = "0.6", features = ["limit", "timeout", "trace", "cors"]
 thiserror = "1.0"
 prometheus = "0.13"
 anyhow = "1.0"
+opentelemetry = "0.26"
+opentelemetry_sdk = { version="0.26", features = ["trace", "rt-tokio"] }
+opentelemetry-stdout = { version = "0.26", features = ["trace"] }
+tracing-opentelemetry = "0.27"
+opentelemetry-otlp = { version = "0.26", features = ["http-json", "trace", "reqwest-client"] }
+opentelemetry-http = "0.26"
 
 [dev-dependencies]
 approx = "0.5"

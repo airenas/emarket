@@ -1,28 +1,30 @@
 mod data;
 mod handlers;
 mod metrics;
+mod otel;
 mod redis;
 
-use axum::extract::DefaultBodyLimit;
+use axum::extract::{DefaultBodyLimit, Request};
 use axum::routing::get;
 use axum::{middleware, Router};
 use clap::{command, Parser};
 use data::Service;
 use deadpool_redis::Runtime;
 use metrics::Metrics;
-use tower_http::cors::CorsLayer;
+use opentelemetry::trace::TraceContextExt;
 use std::process;
 use std::time::Duration;
 use std::{error::Error, sync::Arc};
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
+use tower_http::cors::CorsLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use tokio::signal::unix::{signal, SignalKind};
 
-// use crate::handlers1::{PricesParams, SummaryParams};
 use crate::redis::RedisClient;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -40,9 +42,17 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let _guard = TracerGuard;
+
+    use opentelemetry::trace::TracerProvider as _;
+
+    let provider = otel::init_tracer()?;
+    let tracer = provider.tracer("importer-ws");
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(tracing_subscriber::fmt::Layer::default().compact())
+        .with(telemetry)
         .init();
     let args = Args::parse();
     if let Err(e) = main_int(args).await {
@@ -111,7 +121,19 @@ async fn main_int(args: Args) -> Result<(), Box<dyn Error>> {
         .layer(CorsLayer::permissive())
         .layer((
             DefaultBodyLimit::max(1024 * 1024),
-            TraceLayer::new_for_http(),
+            TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
+                tracing::trace!("request");
+                let cx = otel::extract_context_from_request(&request);
+                tracing::trace!("{:?}", cx.span());
+                let name = format!("{} {}", request.method(), request.uri());
+                let res = tracing::info_span!(
+                    "request",
+                    otel.name = name,
+                    version = ?request.version(),
+                );
+                res.set_parent(cx);
+                res
+            }),
             TimeoutLayer::new(Duration::from_secs(10)),
         ));
 
@@ -138,4 +160,13 @@ async fn shutdown_signal_handle(handle: axum_server::Handle, cancel_token: Cance
     cancel_token.cancelled().await;
     tracing::trace!("Received termination signal shutting down");
     handle.graceful_shutdown(Some(Duration::from_secs(10)));
+}
+
+struct TracerGuard;
+
+impl Drop for TracerGuard {
+    fn drop(&mut self) {
+        tracing::info!("shutting down tracer");
+        opentelemetry::global::shutdown_tracer_provider();
+    }
 }

@@ -8,15 +8,19 @@ use chrono::{Duration, NaiveDateTime, Timelike, Utc};
 use emarket::TN_HOUR;
 use tokio::sync::RwLock;
 
+use tracing::instrument;
+
 use crate::{
     data::{ApiResult, NowData, Service},
     handlers::summary::get_value,
 };
 
+#[instrument(skip(srv_wrap))]
 pub async fn handler(
     State(srv_wrap): State<Arc<RwLock<Service>>>,
 ) -> ApiResult<extract::Json<NowData>> {
     tracing::debug!("now handler");
+
     let srv = srv_wrap.read().await;
 
     let from = hour_start(Utc::now().naive_utc());
@@ -26,6 +30,7 @@ pub async fn handler(
         at: from.and_utc().timestamp_millis(),
         price: get_value(&srv.redis, TN_HOUR, from, to).await?,
     };
+
     Ok(Json(res))
 }
 

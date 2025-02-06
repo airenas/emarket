@@ -11,11 +11,14 @@ use tokio::sync::RwLock;
 
 use crate::data::{ApiError, ApiResult, Service, SummaryData};
 
+use tracing::instrument;
+
 #[derive(Deserialize)]
 pub struct SummaryParams {
     at: Option<i64>,
 }
 
+#[instrument(skip(srv_wrap, params))]
 pub async fn handler(
     State(srv_wrap): State<Arc<RwLock<Service>>>,
     Query(params): Query<SummaryParams>,
@@ -59,6 +62,7 @@ pub async fn get_value(
     get_value_full(redis, ts_name, from, to, 1).await
 }
 
+#[instrument(skip(redis, ts_name, from, to, min_items))]
 async fn get_value_full(
     redis: &crate::redis::RedisClient,
     ts_name: &str,
@@ -74,7 +78,7 @@ async fn get_value_full(
         )
         .await
         .map_err(|e| ApiError::Server(e.to_string()))?;
-    log::debug!("{} len res {} - {}-{}", ts_name, res.len(), from, to);
+    tracing::debug!("{} len res {} - {}-{}", ts_name, res.len(), from, to);
     if res.len() < min_items {
         log::info!("{} < {} - return none", res.len(), min_items);
         return Ok(None);
@@ -82,6 +86,7 @@ async fn get_value_full(
     Ok(Some(res[0].price))
 }
 
+#[instrument(skip(redis, ts_name, from, to))]
 async fn get_avg(
     redis: &crate::redis::RedisClient,
     ts_name: &str,

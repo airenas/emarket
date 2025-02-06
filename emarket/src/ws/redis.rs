@@ -1,5 +1,6 @@
 use deadpool_redis::Pool;
 use redis_ts::{AsyncTsCommands, TsRange};
+use tracing::instrument;
 use std::error::Error;
 
 use crate::data::MarketData;
@@ -23,13 +24,15 @@ impl RedisClient {
         Ok("ok".to_string())
     }
 
+    #[instrument(skip(self))]
     pub async fn load(
         &self,
         ts_name: &str,
         from: Option<i64>,
         to: Option<i64>,
     ) -> Result<Vec<MarketData>, Box<dyn Error>> {
-        log::debug!("invoke load");
+        tracing::debug!("invoke load");
+        
         let mut conn = self.pool.get().await?;
         let none_int: Option<u64> = None;
         let from_s = match from {
