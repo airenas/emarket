@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use axum::extract::Request;
 use opentelemetry::global;
+use opentelemetry::trace::TraceContextExt;
 use opentelemetry::Context;
 use opentelemetry::KeyValue;
 use opentelemetry_http::HeaderExtractor;
@@ -60,13 +61,16 @@ pub fn make_span(req: &Request) -> tracing::Span {
     let cx = extract_context_from_request(req);
     // tracing::trace!("{:?}", cx.span());
 
+    let trace_id = cx.span().span_context().trace_id().to_string();
+
     let path = req.uri().path();
     let name = format!("{} {}", req.method(), path);
 
     let res = tracing::info_span!(
         "request",
         otel.name = name,
-        version = ?req.version(),
+        otel.kind = "server",
+        trace_id,
     );
     res.set_parent(cx);
     res
