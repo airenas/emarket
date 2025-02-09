@@ -72,8 +72,8 @@ pub fn make_span(req: &Request) -> tracing::Span {
         // otel.kind = "server",
         trace_id,
     );
-    res.record("otel.kind", "server");
-    res.record("otel.name", name);
+    res.set_attribute("otel.kind", "server");
+    res.set_attribute("otel.name", name);
     res.set_parent(cx);
     res
 }
