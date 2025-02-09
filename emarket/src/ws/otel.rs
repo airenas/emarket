@@ -68,10 +68,12 @@ pub fn make_span(req: &Request) -> tracing::Span {
 
     let res = tracing::info_span!(
         "request",
-        otel.name = name,
-        otel.kind = "server",
+        req = name,
+        // otel.kind = "server",
         trace_id,
     );
+    res.record("otel.kind", "server");
+    res.record("otel.name", name);
     res.set_parent(cx);
     res
 }
@@ -80,4 +82,47 @@ fn extract_context_from_request(req: &Request) -> Context {
     global::get_text_map_propagator(|propagator| {
         propagator.extract(&HeaderExtractor(req.headers()))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use tracing_test::traced_test;
+
+    #[test]
+    #[traced_test]
+    fn test_make_span() {
+        let req = Request::builder()
+            .method("GET")
+            .uri("/test")
+            .body(Body::empty())
+            .unwrap();
+
+        let span = make_span(&req);
+        let _enter = span.enter();
+        tracing::info!("Doing something in the span");
+        assert!(logs_contain("Doing something in the span"));
+        assert!(logs_contain("trace_id"));
+        assert!(!logs_contain("otel.kind"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_trace_id() {
+        let req = Request::builder()
+            .method("GET")
+            .uri("/test")
+            .header("traceparent", "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01")
+            .body(Body::empty())
+            .unwrap();
+
+        global::set_text_map_propagator(TraceContextPropagator::new());
+        let span = make_span(&req);
+        let _enter = span.enter();
+        tracing::info!("Doing something in the span");
+        assert!(logs_contain("Doing something in the span"));
+        assert!(logs_contain("trace_id"));
+        assert!(logs_contain("0123456789abcdef0123456789abcdef"));
+    }
 }

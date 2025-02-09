@@ -46,6 +46,7 @@ opentelemetry-http = "0.26"
 [dev-dependencies]
 approx = "0.5"
 more-asserts = "0.3"
+tracing-test = "0.2"
 
 [lib]
 name = "emarket"
