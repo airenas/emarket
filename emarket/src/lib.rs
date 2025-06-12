@@ -138,6 +138,9 @@ async fn import(
     });
     let c = data.len();
     log::info!("got {} lines", data.len());
+    let data = fix_missing_hours(&data);
+    log::info!("after fixing {} lines", data.len());
+
     let mut res = from;
 
     for line in data {
@@ -152,6 +155,31 @@ async fn import(
         return Ok((res, 0));
     }
     Ok((res, c.try_into()?))
+}
+
+fn fix_missing_hours(data: &Vec<Data>) -> Vec<Data> {
+    let mut res = Vec::with_capacity(data.len());
+    if data.len() == 0 {
+        return res;
+    }
+    let mut from = data[0].at;
+    let mut prev_price = data[0].price;
+    res.push(data[0].clone());
+    for i in 1..data.len() {
+        let d = &data[i];
+        from = from + Duration::hours(1);
+        while from < d.at {
+            res.push(Data {
+                at: from,
+                price: prev_price,
+            });
+            from = from + Duration::hours(1);
+        }
+        res.push(d.clone());
+        from = d.at;
+        prev_price = d.price;
+    }
+    res
 }
 
 pub async fn saver_start(
@@ -179,7 +207,7 @@ pub async fn aggregate_start(
     mut worker: Box<dyn Aggregator + Send + Sync>,
     receiver: &mut Receiver<NaiveDateTime>,
 ) -> Result<(), String> {
-    log::info!("start db saver loop");
+    log::info!("start db aggregate loop");
     loop {
         let td = receiver.recv().await;
         log::trace!("got aggregate indicator");
@@ -201,9 +229,9 @@ pub async fn aggregate_start(
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, Utc};
+    use chrono::{Duration, NaiveDate, Utc};
 
-    use crate::get_sleep;
+    use crate::{data::Data, fix_missing_hours, get_sleep};
 
     #[test]
     fn get_sleep_long() {
@@ -249,5 +277,144 @@ mod tests {
             get_sleep(at, now, |_| Duration::minutes(0)),
             Duration::minutes(3)
         );
+    }
+    #[test]
+    fn test_fix_missing_hours() {
+        struct Case {
+            input: Vec<Data>,
+            expected: Vec<Data>,
+        }
+
+        let base = NaiveDate::from_ymd_opt(2024, 1, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
+
+        let cases = vec![
+            Case {
+                input: vec![],
+                expected: vec![],
+            },
+            Case {
+                input: vec![Data {
+                    at: base,
+                    price: 1.0,
+                }],
+                expected: vec![Data {
+                    at: base,
+                    price: 1.0,
+                }],
+            },
+            Case {
+                input: vec![
+                    Data {
+                        at: base,
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(1),
+                        price: 2.0,
+                    },
+                ],
+                expected: vec![
+                    Data {
+                        at: base,
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(1),
+                        price: 2.0,
+                    },
+                ],
+            },
+            Case {
+                input: vec![
+                    Data {
+                        at: base,
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(2),
+                        price: 3.0,
+                    },
+                ],
+                expected: vec![
+                    Data {
+                        at: base,
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(1),
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(2),
+                        price: 3.0,
+                    },
+                ],
+            },
+            Case {
+                input: vec![
+                    Data {
+                        at: base,
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(3),
+                        price: 4.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(4),
+                        price: 5.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(6),
+                        price: 6.0,
+                    },
+                ],
+                expected: vec![
+                    Data {
+                        at: base,
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(1),
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(2),
+                        price: 1.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(3),
+                        price: 4.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(4),
+                        price: 5.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(5),
+                        price: 5.0,
+                    },
+                    Data {
+                        at: base + Duration::hours(6),
+                        price: 6.0,
+                    },
+                ],
+            },
+        ];
+
+        for (i, case) in cases.into_iter().enumerate() {
+            let result = fix_missing_hours(&case.input);
+            assert_eq!(
+                result,
+                case.expected,
+                "Test case {} failed: expected {:?}, got {:?}",
+                i + 1,
+                case.expected,
+                result
+            );
+        }
     }
 }
