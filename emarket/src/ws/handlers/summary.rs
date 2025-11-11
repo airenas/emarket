@@ -9,7 +9,7 @@ use emarket::utils::{time_day_vilnius, time_month_vilnius, to_str_or_none, to_ti
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
-use crate::data::{ApiError, ApiResult, Service, SummaryData};
+use crate::data::{ApiError, ApiResult, MarketData, Service, SummaryData};
 
 use tracing::instrument;
 
@@ -84,6 +84,25 @@ async fn get_value_full(
         return Ok(None);
     }
     Ok(Some(res[0].price))
+}
+
+#[instrument(skip(redis, ts_name, from, to))]
+pub async fn get_list(
+    redis: &crate::redis::RedisClient,
+    ts_name: &str,
+    from: NaiveDateTime,
+    to: NaiveDateTime,
+) -> anyhow::Result<Vec<MarketData>> {
+    let res = redis
+        .load(
+            ts_name,
+            Some(from.and_utc().timestamp_millis()),
+            Some(to.and_utc().timestamp_millis()),
+        )
+        .await
+        .map_err(|e| ApiError::Server(e.to_string()))?;
+    tracing::debug!("{} len res {} - {}-{}", ts_name, res.len(), from, to);
+    Ok(res)
 }
 
 #[instrument(skip(redis, ts_name, from, to))]
