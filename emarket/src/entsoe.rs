@@ -27,8 +27,8 @@ impl EntSOE {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(5);
         let client = Client::builder()
             .pool_max_idle_per_host(5)
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(15))
+            .connect_timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(65))
             .build()?;
         let client_with_retry = ClientBuilder::new(client)
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
@@ -117,15 +117,40 @@ fn map_to_data(doc: EntSOEDoc) -> Result<Vec<Data>, Box<dyn Error>> {
 
 fn to_data(p: &EntSOEPeriod) -> Result<Vec<Data>, Box<dyn Error>> {
     let time = NaiveDateTime::parse_from_str(&p.time_interval.start, "%Y-%m-%dT%H:%MZ")?;
+    // parse <resolution>PT15M</resolution>
+    let resolution = parse_resolution(&p.resolution)?;
+
     let res = p
         .points
         .iter()
         .map(|p| Data {
-            at: time + chrono::Duration::hours(i64::from(p.position) - 1),
+            at: time + (resolution * (i64::from(p.position) - 1) as i32),
             price: p.price,
         })
         .collect();
     Ok(res)
+}
+
+fn parse_resolution(resolution: &str)   -> Result<chrono::Duration, Box<dyn Error>> {
+    if resolution == "PT5M" {
+        return Ok(chrono::Duration::minutes(5));
+    }
+    if resolution == "PT10M" {
+        return Ok(chrono::Duration::minutes(10));
+    }
+    if resolution == "PT15M" {
+        return Ok(chrono::Duration::minutes(15));
+    }
+    if resolution == "PT30M" {
+        return Ok(chrono::Duration::minutes(30));
+    }
+    if resolution == "PT60M" {
+        return Ok(chrono::Duration::hours(1));
+    }
+    Err(Box::new(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        format!("unsupported resolution: {}", resolution),
+    )))
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -148,6 +173,10 @@ struct EntSOETimeseries {
 struct EntSOEPeriod {
     #[serde(rename = "timeInterval")]
     pub time_interval: EntSOETimeInterval,
+
+    #[serde(rename = "resolution", default)]
+    pub resolution: String,
+
     #[serde(rename = "Point")]
     pub points: Vec<EntSOEPoint>,
 }

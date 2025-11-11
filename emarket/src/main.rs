@@ -139,7 +139,7 @@ async fn main_int(args: Args) -> Result<(), Error> {
     //     let interval = config.interval.clone();
     let int_limiter = limiter.clone();
     let start_from = db_hours.get_last_time().await.unwrap().unwrap_or(
-        NaiveDate::from_ymd_opt(2014, 1, 1)
+        NaiveDate::from_ymd_opt(2020, 1, 1)
             .unwrap()
             .and_hms_opt(0, 0, 0)
             .unwrap(),
